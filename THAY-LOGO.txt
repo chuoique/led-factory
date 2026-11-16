@@ -1,0 +1,18 @@
+HINH ANH / THONG TIN MAU - THAY KHI CO BAN THAT
+================================================
+
+Cac file anh trong thu muc web\ hien la BAN MAU (chu "LOGO MAU", "BIEN HIEU MAU").
+Thay bang file that, GIU NGUYEN TEN FILE va dinh dang PNG:
+
+  logo.png              logo tren man hinh ghep may / dang nhap   (ngang, vd 600 x 300)
+  icon-192.png          bieu tuong app + logo goc tren trang       (vuong 192 x 192)
+  icon-512.png          bieu tuong app (Android, may tinh)         (vuong 512 x 512)
+  apple-touch-icon.png  bieu tuong khi "Them vao Man hinh chinh" tren iPhone (vuong 180 x 180)
+  bien-hieu.png         anh bien hieu trong He thong -> Doanh nghiep (ngang, khoang 3:1)
+
+Sau khi thay: tang so phien ban CACHE trong web\sw.js (vd 'lf-v1' -> 'lf-v2') roi dua len GitHub,
+de may da cai app tai anh moi.
+
+Ten, ma so thue, dia chi, dien thoai cong ty: KHONG can sua file - vao app -> He thong -> Doanh nghiep
+(quan ly sua, tu dong bo sang moi may chu). Ten he thong (hien tren dau trang): He thong -> May chu -> Ten he thong.
+Mau chu dao cua app: web\index.html, bien --brand (dau file).
