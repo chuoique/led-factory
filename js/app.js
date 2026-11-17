@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.17';
+const APP_VERSION = 'LED Factory 0.18';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -36,10 +36,13 @@ const dayLabel = ms => { const d = new Date(ms); return `${(window.I18N && I18N.
 const dayStart = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const dateVal = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const fromInputs = (date, time) => new Date(`${date}T${time || '00:00'}`).getTime();
-const ROLE = { sysadmin: 'Quản trị hệ thống', chairman: 'Chủ tịch HĐQT', ceo: 'Giám đốc', owner: 'Quản lý', store: 'Thủ kho', tech: 'Kỹ thuật', sales: 'Bán hàng' };
+const ROLE = { sysadmin: 'Quản trị hệ thống', chairman: 'Chủ tịch HĐQT', ceo: 'Giám đốc', owner: 'Quản lý', assistant: 'Trợ lý', store: 'Thủ kho', tech: 'Kỹ thuật', sales: 'Bán hàng' };
 // 3 cấp quản trị đều toàn quyền (máy chủ kiểm tra); cấp thấp không cấp/sửa được tài khoản cấp cao hơn
 const RANK = { sysadmin: 4, chairman: 3, ceo: 2, owner: 1 };   // sysadmin: chỉ cấp trên máy chủ, ẩn khỏi danh sách
-const myRole = () => (S.me && RANK[S.me.role]) ? 'owner' : (S.me && S.me.role);
+// Trợ lý: nghiệp vụ như Quản lý (myRole = 'owner') nhưng không có phần quản trị (isAdmin = false)
+const myRole = () => (S.me && (RANK[S.me.role] || S.me.role === 'assistant')) ? 'owner' : (S.me && S.me.role);
+const isAdmin = () => !!(S.me && RANK[S.me.role]);
+const myTabs = () => S.me && S.me.role === 'assistant' ? TABS.owner.filter(t => t !== 'staff') : TABS[myRole()];
 const STATUS = { void: 'Đã hủy', done: 'Xong', cancelled: 'Đã hủy' };
 const METHOD = { cash: 'Tiền mặt', transfer: 'Chuyển khoản', card: 'Thẻ' };
 const chip = st => h('span', { class: 'chip ' + st }, STATUS[st] || st);
@@ -204,7 +207,7 @@ function screenForceChange() {
 }
 function screenMain() {
   if (S.me && S.me.must_change) return screenForceChange();
-  const tabs = TABS[myRole()] || ['system'];
+  const tabs = myTabs() || ['system'];
   if (!tabs.includes(S.tab)) S.tab = tabs[0];
   $('#app').replaceChildren(
     h('header', { class: 'top' }, h('div', { class: 'in' },
@@ -224,7 +227,7 @@ function screenMain() {
 }
 function go(tab) {
   S.tab = tab;
-  document.querySelectorAll('nav.tabs button').forEach((b, i) => b.classList.toggle('on', (TABS[myRole()] || [])[i] === tab));
+  document.querySelectorAll('nav.tabs button').forEach((b, i) => b.classList.toggle('on', (myTabs() || [])[i] === tab));
   const el = $('#view');
   if (!el) return;
   el.replaceChildren(h('div', { class: 'empty' }, 'Đang tải…'));
@@ -952,10 +955,10 @@ const accSeg = cur => segBar(cur, [['users', '👥 Tài khoản'], ['devices', '
 async function vStaff(el) {
   if (S.accTab === 'devices') return vDevices(el);
   if (S.accTab === 'helpers') return vHelpers(el);
-  const ORDER = { chairman: 0, ceo: 1, owner: 2, store: 3, tech: 4, sales: 5 };
+  const ORDER = { chairman: 0, ceo: 1, owner: 2, assistant: 3, store: 4, tech: 5, sales: 6 };
   const rows = (await api('staff.list')).sort((a, b) => ((ORDER[a.role] ?? 9) - (ORDER[b.role] ?? 9)) || String(a.display_name || a.username).localeCompare(String(b.display_name || b.username), 'vi'));
   el.replaceChildren(h('div', { class: 'card' }, accSeg('users'), h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
-    h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.'),
+    h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Trợ lý: như Quản lý nhưng không quản lý tài khoản, thiết bị, cài đặt hệ thống, trợ giúp từ xa. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.'),
     h('div', { class: 'list' }, rows.map(u => h('div', { class: 'item', onclick: () => staffEdit(u) },
       h('div', { class: 'l' }, RANK[u.role] ? '👑' : '👤'), h('div', { class: 't' }, u.display_name || u.username),
       h('div', { class: 'r' }, h('span', { class: 'chip' }, ROLE[u.role] || u.role), u.active ? '' : [h('br'), h('span', { class: 'chip cancelled' }, 'Khóa')]),
@@ -1416,7 +1419,7 @@ async function trashSheet() {
   load();
 }
 async function vSystem(el) {
-  const owner = myRole() === 'owner';
+  const owner = isAdmin();
   const id = Conn.identity() || {};
   const lanIn = h('input', { placeholder: '192.168.1.125', inputmode: 'decimal' });
   const knownLan = (Conn.diag().lanAddrs || []);

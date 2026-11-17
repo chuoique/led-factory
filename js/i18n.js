@@ -214,6 +214,7 @@ const EN = {
   // ---- LED Factory: sản xuất, kho, mua bán, tạo mã, thông báo máy chủ ----
   "Giám đốc": "Director",
   "Quản lý": "Manager",
+  "Trợ lý": "Assistant",
   "Thủ kho": "Storekeeper",
   "Kỹ thuật": "Technician",
   "Bán hàng": "Sales",
@@ -552,7 +553,7 @@ const EN = {
   "👥 Tài khoản": "👥 Accounts",
   "📱 Điện thoại / máy tính": "📱 Phones / computers",
   "+ Thêm tài khoản": "+ Add account",
-  "Mỗi người một tài khoản riêng. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.": "One account per person. Storekeeper: components, purchasing. Technician: production, Create ID. Sales: customers, sales.",
+  "Mỗi người một tài khoản riêng. Trợ lý: như Quản lý nhưng không quản lý tài khoản, thiết bị, cài đặt hệ thống, trợ giúp từ xa. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.": "One account per person. Assistant: like Manager but cannot manage accounts, devices, system settings or remote support. Storekeeper: components, purchasing. Technician: production, Create ID. Sales: customers, sales.",
   "Khóa": "Locked",
   "Để trống nếu không đổi": "Leave empty to keep",
   "Kỹ thuật viên, Thủ kho…": "Technician, storekeeper…",
