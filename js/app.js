@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.18';
+const APP_VERSION = 'LED Factory 0.19';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -343,7 +343,59 @@ async function vKeys(el) {
       else { msg.className = 'small'; msg.style.color = 'var(--bad)'; msg.textContent = T('Không tìm thấy UID (24 ký tự hex) trong ') + f.name; }
       ck(); }; r.readAsText(f); };
     const fileIn = h('input', { type: 'file', accept: '.txt,.TXT,text/plain', style: 'display:none', onchange: e => { readFile(e.target.files[0]); e.target.value = ''; } });
-    const dz = h('div', { class: 'row dz' }, h('div', { class: 'grow' }, uid), h('label', { class: 'btn ghost small' }, 'Chọn UID.TXT', fileIn));
+    // "Quét UID": tìm UID.TXT ở thư mục gốc ổ USB.
+    //  - app mở trên chính máy chủ: máy chủ tự quét mọi ổ USB (usb.scan_uid)
+    //  - Chrome / Edge máy tính khác: chọn ổ USB 1 lần (trình duyệt nhớ chỗ cho lần sau)
+    const say = (ok, text) => { msg.className = 'small'; msg.style.color = `var(--${ok ? 'ok' : 'bad'})`; msg.textContent = text; };
+    const useText = (text, src) => {
+      const u = uidFind(text);
+      if (u) { uid.value = uidFmt(u); say(true, T('Đã lấy UID từ ') + src + T(' – bấm Tạo mã')); }
+      else say(false, T('Không tìm thấy UID (24 ký tự hex) trong ') + src);
+      ck();
+    };
+    const useFound = (found, none) => {
+      const f = (found || []).filter(x => uidFind(x.text));
+      if (f.length === 1) return useText(f[0].text, `${f[0].drive}\\UID.TXT`);
+      if (f.length > 1) {
+        let close;
+        close = sheet('Chọn ổ USB', h('div', { style: 'display:grid;gap:8px' }, f.map(x => h('button', { class: 'btn ghost', onclick: () => { close(); useText(x.text, `${x.drive}\\UID.TXT`); } },
+          `${x.drive} ${x.label || ''} · ${uidFmt(uidFind(x.text))}`))));
+        return;
+      }
+      say(false, T(none));
+    };
+    const scanUsb = async () => {
+      // 1. Trợ giúp LED Factory đang chạy trên CHÍNH máy này (Windows): quét mọi ổ USB của máy này
+      if (/Windows/.test(navigator.userAgent)) {
+        try {
+          const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 2000);
+          const res = await fetch('http://127.0.0.1:47815/uid', { signal: ctl.signal, cache: 'no-store' });
+          clearTimeout(tm);
+          if (res.ok) return useFound((await res.json()).found, 'Không thấy UID.TXT ở thư mục gốc ổ USB nào của máy này');
+        } catch (e) {}
+      }
+      // 2. App mở trên chính máy chủ: máy chủ quét
+      let r = null;
+      try { r = await api('usb.scan_uid', {}, true); } catch (e) {}
+      if (r && r.local) return useFound(r.found, 'Không thấy UID.TXT ở thư mục gốc ổ USB nào của máy chủ');
+      if (!window.showDirectoryPicker) return say(false, T('Máy này không quét được ổ USB: mở app trên máy chủ hoặc dùng Chrome / Edge trên máy tính, hoặc bấm Chọn UID.TXT'));
+      try {
+        const dir = await window.showDirectoryPicker({ id: 'lf-uid-usb', mode: 'read' });
+        for await (const [name, hd] of dir.entries())
+          if (hd.kind === 'file' && name.toUpperCase() === 'UID.TXT') return useText(await (await hd.getFile()).text(), `${dir.name}\\${name}`);
+        say(false, T('Không có UID.TXT ở thư mục gốc của ') + dir.name);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        // trình duyệt không cho chọn cả ổ đĩa -> chọn thẳng file (vẫn nhớ chỗ cho lần sau)
+        try {
+          const [fh] = await window.showOpenFilePicker({ id: 'lf-uid-file', types: [{ description: 'UID.TXT', accept: { 'text/plain': ['.txt'] } }] });
+          const file = await fh.getFile();
+          useText(await file.text(), file.name);
+        } catch (e2) { if (e2.name !== 'AbortError') say(false, e2.message); }
+      }
+    };
+    const scanBtn = h('button', { class: 'btn ghost small', onclick: () => busy(scanBtn, scanUsb()) }, '🔍 Quét UID');
+    const dz = h('div', { class: 'row dz' }, h('div', { class: 'grow' }, uid), scanBtn, h('label', { class: 'btn ghost small' }, 'Chọn UID.TXT', fileIn));
     ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
     ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
     dz.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
