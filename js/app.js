@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.19';
+const APP_VERSION = 'LED Factory 0.20';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -364,6 +364,39 @@ async function vKeys(el) {
       }
       say(false, T(none));
     };
+    // "Lưu vào thiết bị": ghi mã vào "id" trong config.json của ổ USB có UID.TXT TRÙNG UID (không ghi nhầm mạch)
+    //  1. trợ giúp trên máy này  2. máy chủ (app mở trên máy chủ)  3. ổ đã chọn bằng trình duyệt (Chrome / Edge)
+    let lastDir = null;
+    const sameUid = (a, b) => !!a && !!b && String(a).replace(/-/g, '').toUpperCase() === String(b).replace(/-/g, '').toUpperCase();
+    const putId = (text, key) => /"id"\s*:\s*"[^"]*"/.test(text) ? text.replace(/("id"\s*:\s*")[^"]*(")/, `$1${key}$2`)
+      : text.replace('{', `{${text.includes('\r\n') ? '\r\n' : '\n'}  "id": "${key}",`);
+    const saveToDevice = async (uidv, key) => {
+      let why = '';
+      if (/Windows/.test(navigator.userAgent)) {
+        try {
+          const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+          const res = await fetch('http://127.0.0.1:47815/id', { method: 'POST', body: JSON.stringify({ uid: uidv, id: key }), signal: ctl.signal, cache: 'no-store' });
+          clearTimeout(tm);
+          if (res.ok) { const j = await res.json(); if (j.ok) return j.drive; why = j.why; }
+        } catch (e) {}
+      }
+      try { return (await api('usb.write_id', { uid: uidv, id: key }, true)).drive; } catch (e) { why = why || e.message; }
+      if (lastDir) {
+        if ((await lastDir.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error(T('Cần cho phép ghi vào ổ USB'));
+        let uidTxt = null, cfg = null;
+        for await (const [name, hd] of lastDir.entries()) {
+          if (hd.kind !== 'file') continue;
+          if (name.toUpperCase() === 'UID.TXT') uidTxt = hd;
+          if (name.toLowerCase() === 'config.json') cfg = hd;
+        }
+        if (uidTxt && cfg && sameUid(uidFind(await (await uidTxt.getFile()).text()), uidv)) {
+          const text = await (await cfg.getFile()).text(), wr = await cfg.createWritable();
+          await wr.write(putId(text, key)); await wr.close();
+          return lastDir.name;
+        }
+      }
+      throw new Error(why || T('Không thấy ổ USB của mạch này (cắm mạch vào máy đang mở app)'));
+    };
     const scanUsb = async () => {
       // 1. Trợ giúp LED Factory đang chạy trên CHÍNH máy này (Windows): quét mọi ổ USB của máy này
       if (/Windows/.test(navigator.userAgent)) {
@@ -381,6 +414,7 @@ async function vKeys(el) {
       if (!window.showDirectoryPicker) return say(false, T('Máy này không quét được ổ USB: mở app trên máy chủ hoặc dùng Chrome / Edge trên máy tính, hoặc bấm Chọn UID.TXT'));
       try {
         const dir = await window.showDirectoryPicker({ id: 'lf-uid-usb', mode: 'read' });
+        lastDir = dir;
         for await (const [name, hd] of dir.entries())
           if (hd.kind === 'file' && name.toUpperCase() === 'UID.TXT') return useText(await (await hd.getFile()).text(), `${dir.name}\\${name}`);
         say(false, T('Không có UID.TXT ở thư mục gốc của ') + dir.name);
@@ -405,11 +439,20 @@ async function vKeys(el) {
       const copy = h('button', { class: 'btn' }, 'Sao chép');
       copy.onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(r.line) : Promise.reject()).then(() => { copy.textContent = T('Đã sao chép'); })
         .catch(() => { const s = window.getSelection(), rg = document.createRange(); rg.selectNodeContents(line); s.removeAllRanges(); s.addRange(rg); try { document.execCommand('copy'); copy.textContent = T('Đã sao chép'); } catch (e) {} }); };
+      const key = (String(r.line).match(/[0-9A-Fa-f]{128}/) || [''])[0];
+      const saveMsg = h('p', { class: 'small' });
+      const save = h('button', { class: 'btn ghost', onclick: () => busy(save, saveToDevice(r.uid, key).then(drv => {
+        saveMsg.style.color = 'var(--ok)';
+        saveMsg.textContent = T('Đã lưu mã vào config.json trên ổ ') + drv + T(' – Eject (Safely Remove) ổ rồi rút / cắm lại mạch');
+        save.textContent = T('✓ Đã lưu vào thiết bị');
+      }).catch(e => { saveMsg.style.color = 'var(--bad)'; saveMsg.textContent = e.message; })) }, '💾 Lưu vào thiết bị');
+      if (!key) save.disabled = true;
       out.replaceChildren(h('div', { class: 'card' },
         h('div', { class: 'row' }, boardIcon(b), h('p', { style: 'color:var(--' + (r.again ? 'muted' : 'ok') + ')' }, r.again ? `Mạch ĐÃ CÓ MÃ (tạo ${b.key_at ? dmy(b.key_at) : ''}) – tạo lại mã, không tính mạch mới` : 'Mạch MỚI – đã vào Thành phẩm')),
         h('div', { class: 'mono' }, 'UID ' + uidFmt(r.uid)),
         h('p', { class: 'small muted' }, 'Dán dòng dưới vào config.json trên ổ CONFIG của mạch (thay dòng "id" cũ):'), line,
-        h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'))));
+        h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'), save),
+        saveMsg));
       uid.value = ''; msg.textContent = ''; ck(); reloadList();
     }).catch(() => {}));
     cards.push(h('div', { class: 'card' }, h('h2', {}, 'Tạo mã mạch LED'),
