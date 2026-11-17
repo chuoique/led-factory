@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.13';
+const APP_VERSION = 'LED Factory 0.14';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1191,7 +1191,7 @@ function rdViewer(d) {
     const x = (r.helpers || []).find(z => z.id === d.id), st = (x && x.state) || {};
     status.textContent = T(!x || !x.online ? 'Máy trợ giúp mất kết nối'
       : st.rd === 2 ? 'Đang chờ người dùng bên đó bấm Cho phép…'
-      : st.rd === 1 ? (st.frame_age_ms >= 0 && st.frame_age_ms < 5000 ? ${T(viewOnly ? 'Đang xem' : 'Đang điều khiển')} · ${T(HPATH[x.path] || '')} : 'Đang chờ hình…')
+      : st.rd === 1 ? (st.frame_age_ms >= 0 && st.frame_age_ms < 5000 ? `${T(viewOnly ? 'Đang xem' : 'Đang điều khiển')} · ${T(HPATH[x.path] || '')}` : 'Đang chờ hình…')
       : st.why === 'denied' ? 'Người dùng KHÔNG cho phép' : st.why === 'timeout' ? 'Người dùng không trả lời' : st.why ? 'Người dùng đã dừng phiên hỗ trợ' : 'Đang kết nối…');
   }).catch(() => {}), 1500);
   document.body.append(wrap);
