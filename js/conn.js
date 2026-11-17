@@ -250,7 +250,7 @@ async function probeKnown() {
   });
   lan.probing = false;
   if (found) { log(`Nội bộ: thấy máy chủ ở ${found.ip}`); adoptLAN(found.ws, found.ip); return true; }
-  if (!lan.up) lan.state = HTTP_PAGE ? 'máy chủ không trả lời' : 'không thấy (chưa ở spa, hoặc chưa cài chứng chỉ)';
+  if (!lan.up) lan.state = HTTP_PAGE ? 'máy chủ không trả lời' : 'không thấy (chưa ở xưởng, hoặc chưa cài chứng chỉ)';
   return false;
 }
 async function scanSubnets() {

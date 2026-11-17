@@ -1,16 +1,20 @@
-HINH ANH / THONG TIN MAU - THAY KHI CO BAN THAT
-================================================
+LOGO / HINH ANH / THONG TIN CONG TY
+===================================
 
-Cac file anh trong thu muc web\ hien la BAN MAU (chu "LOGO MAU", "BIEN HIEU MAU").
-Thay bang file that, GIU NGUYEN TEN FILE va dinh dang PNG:
+Logo LED Factory (ve 17/11/2026): chip tren nen xanh, giua chip 3 diem LED do / xanh la / xanh duong.
+Ve lai (doi mau, doi chu): sua roi chay   python server\tools\ve_logo.py web
+(can Python + Pillow; chu dung font Segoe UI cua Windows)
 
-  logo.png              logo tren man hinh ghep may / dang nhap   (ngang, vd 600 x 300)
+  logo.png              logo tren man hinh ghep may / dang nhap   (ngang 600 x 300, nen trong suot)
   icon-192.png          bieu tuong app + logo goc tren trang       (vuong 192 x 192)
   icon-512.png          bieu tuong app (Android, may tinh)         (vuong 512 x 512)
-  apple-touch-icon.png  bieu tuong khi "Them vao Man hinh chinh" tren iPhone (vuong 180 x 180)
-  bien-hieu.png         anh bien hieu trong He thong -> Doanh nghiep (ngang, khoang 3:1)
+  apple-touch-icon.png  bieu tuong khi "Them vao Man hinh chinh" tren iPhone (vuong 180 x 180, khong trong suot)
 
-Sau khi thay: tang so phien ban CACHE trong web\sw.js (vd 'lf-v1' -> 'lf-v2') roi dua len GitHub,
+VAN LA BAN MAU - thay khi co anh that (giu nguyen ten file, dinh dang PNG):
+  bien-hieu.png         anh bien hieu / mat tien cong ty trong He thong -> Doanh nghiep (ngang, khoang 3:1, vd 1200 x 400)
+
+Muon dung logo khac: thay 4 file tren bang file cung ten, cung kich thuoc.
+Sau khi thay bat ky anh nao: tang so phien ban CACHE trong web\sw.js (vd 'lf-v11' -> 'lf-v12') roi dua len GitHub,
 de may da cai app tai anh moi.
 
 Ten, ma so thue, dia chi, dien thoai cong ty: KHONG can sua file - vao app -> He thong -> Doanh nghiep
