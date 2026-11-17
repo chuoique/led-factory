@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.4';
+const APP_VERSION = 'LED Factory 0.5';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -303,12 +303,12 @@ const ask = (q) => window.prompt(T(q));
 
 // ---------- LẤY ID + MẠCH (trước là 2 tab) ----------
 // 1. "Lấy ID mạch LED": ô UID (gõ / UID.TXT / bấm dòng ở mục 2) -> ký -> dòng "id" cho config.json
-// 2. "Nhập UID (chưa lấy ID)": ghi UID trước, lấy ID sau – bấm 1 dòng = đưa UID lên ô phía trên
-// 3. "Danh sách mạch": mọi mạch (tìm, lọc, in tem, chi tiết / dòng đời)
+// 2. "Nhập UID (chưa lấy ID)" = mục Mạch cũ GIỮ NGUYÊN (tìm, lọc, in tem, + Thêm mạch, chi tiết / dòng đời);
+//    bấm 1 mạch chưa có ID -> UID lên ô Lấy ID phía trên
 let keyCtx = { product_id: '', work_order_id: '' };
 async function vKeys(el) {
-  const canIssue = can('keys.issue'), canAdd = can('boards.save');
-  const [st, wos] = await Promise.all([canIssue ? api('keys.status') : { ready: false }, (canIssue || canAdd) ? api('wo.list', { open: 1 }).catch(() => []) : []]);
+  const canIssue = can('keys.issue');
+  const [st, wos] = await Promise.all([canIssue ? api('keys.status') : { ready: false }, canIssue ? api('wo.list', { open: 1 }).catch(() => []) : []]);
   await refreshProducts();
   const cards = [];
   const uid = h('input', { placeholder: '36FFDB05-30473036-33562443', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false', class: 'mono' });
@@ -316,7 +316,7 @@ async function vKeys(el) {
   const btn = h('button', { class: 'btn', disabled: true }, 'Lấy ID');
   const out = h('div', { style: 'display:grid;gap:10px' });
   const ck = () => { const ok = !!uidNorm(uid.value); btn.disabled = !ok || !st.ready; btn.style.opacity = btn.disabled ? 0.45 : 1; };
-  let reloadPending = () => {}, reloadList = () => {};
+  let reloadList = () => {};
   // bấm 1 dòng "chưa lấy ID" -> UID lên ô Lấy ID
   const setUid = b => {
     uid.value = uidFmt(b.uid); msg.className = 'small'; msg.style.color = 'var(--ok)';
@@ -349,37 +349,19 @@ async function vKeys(el) {
         h('div', { class: 'mono' }, 'UID ' + uidFmt(r.uid)),
         h('p', { class: 'small muted' }, 'Dán dòng dưới vào config.json trên ổ CONFIG của mạch (thay dòng "id" cũ):'), line,
         h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'))));
-      uid.value = ''; msg.textContent = ''; ck(); reloadPending(); reloadList();
+      uid.value = ''; msg.textContent = ''; ck(); reloadList();
     }).catch(() => {}));
     cards.push(h('div', { class: 'card' }, h('h2', {}, 'Lấy ID mạch LED'),
       !st.ready && h('div', { class: 'banner' }, 'Máy chủ "' + st.server + '" không cấp được ID: ' + st.why + '. Cài khoá riêng lên máy chủ này (giống key server: %LOCALAPPDATA%\\KeyServer\\ed25519_private.key) hoặc dùng máy chủ khác có khoá.'),
       two(field('Loại mạch', prod), field('Lệnh sản xuất', wo)),
-      field('UID (24 ký tự hex) – gõ, chọn / kéo thả file UID.TXT, hoặc bấm 1 dòng ở mục "Nhập UID" bên dưới', dz), msg, btn), out);
+      field('UID (24 ký tự hex) – gõ, chọn / kéo thả file UID.TXT, hoặc bấm 1 mạch chưa có ID ở mục bên dưới', dz), msg, btn), out);
   }
-  if (canAdd) {   // mục 2: UID ghi trước, chưa lấy ID
-    const inp = h('input', { placeholder: 'Quét / gõ UID rồi Enter (dán được nhiều UID một lúc)', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false' });
-    const box = h('div', { class: 'list' });
-    const add = () => {
-      const list = [...new Set((inp.value.match(/[0-9A-Fa-f]{8}[-\s]?[0-9A-Fa-f]{8}[-\s]?[0-9A-Fa-f]{8}/g) || []).map(uidFind))];
-      if (!list.length) return toast('UID phải có 24 ký tự hex', true);
-      Promise.all(list.map(u => api('boards.save', { uid: u, product_id: keyCtx.product_id || null, work_order_id: keyCtx.work_order_id || null }, true).then(() => 1, e => { toast(e.message, true); return 0; })))
-        .then(r => { const n = r.reduce((s, x) => s + x, 0); if (n) toast(`${T('Đã ghi')} ${n} UID`); inp.value = ''; reloadPending(); reloadList(); });
-    };
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-    reloadPending = () => api('boards.list', { no_key: 1, limit: 500 }, true).then(rows => box.replaceChildren(...(rows.length ? rows.map(b => h('div', { class: 'item', onclick: () => canIssue ? setUid(b) : boardDetail(b.uid) },
-      h('div', { class: 'l' }, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
-      h('div', { class: 'r' }, h('button', { class: 'btn ghost small', onclick: e => { e.stopPropagation(); boardDetail(b.uid); } }, '…')),
-      h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.created_at && dmy(b.created_at)].filter(Boolean).join(' · ')))) :
-      [h('div', { class: 'empty' }, 'Không có UID nào đang chờ lấy ID')]))).catch(() => {});
-    cards.push(h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'),
-      h('p', { class: 'small muted' }, 'Ghi UID mạch trước, lấy ID sau. Loại mạch / lệnh sản xuất lấy theo ô chọn ở trên. Bấm 1 dòng để đưa UID lên ô Lấy ID.'),
-      h('div', { class: 'row' }, h('div', { class: 'grow' }, inp), h('button', { class: 'btn ghost', onclick: add }, 'Ghi UID')), box));
-  }
-  const list = boardsCard();
+  // phan Mach (giu nguyen noi dung): bam mach CHUA co ID -> UID len o Lay ID; mach da co ID -> chi tiet
+  const list = boardsCard(canIssue ? setUid : null);
   reloadList = list.load;
   cards.push(list.card);
   el.replaceChildren(...cards);
-  ck(); reloadPending(); await list.load();
+  ck(); await list.load();
 }
 
 // ---------- tem QR theo UID ----------
@@ -412,9 +394,9 @@ function printLabels(boards) {
     } }, '🖨 In'));
 }
 
-// ---------- DANH SÁCH MẠCH (trong trang Lấy ID) ----------
+// ---------- MẠCH (mục cũ, giữ nguyên nội dung; nằm trong trang Lấy ID, tiêu đề "Nhập UID (chưa lấy ID)") ----------
 let boardQ = '', boardSt = '';
-function boardsCard() {
+function boardsCard(onPick) {
   const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh sản xuất, số phiếu bán…', value: boardQ });
   const box = h('div', { class: 'list' });
   let rows = [], picked = new Set();
@@ -424,16 +406,18 @@ function boardsCard() {
     printBtn.textContent = T('🏷 In tem đã chọn') + (picked.size ? ` (${picked.size})` : '');
     box.replaceChildren(...(rows.length ? rows.map(b => {
       const cb = h('input', { type: 'checkbox', checked: picked.has(b.id), onclick: e => e.stopPropagation(), onchange: e => { e.target.checked ? picked.add(b.id) : picked.delete(b.id); printBtn.textContent = T('🏷 In tem đã chọn') + (picked.size ? ` (${picked.size})` : ''); } });
-      return h('div', { class: 'item', onclick: () => boardDetail(b.uid) }, h('div', { class: 'l', style: 'display:flex;gap:6px;align-items:center' }, cb, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
+      return h('div', { class: 'item', onclick: () => (onPick && !b.key_id) ? onPick(b) : boardDetail(b.uid) }, h('div', { class: 'l', style: 'display:flex;gap:6px;align-items:center' }, cb, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
         h('div', { class: 'r' }, bchip(b.status), b.key_id ? '' : [h('br'), h('span', { class: 'chip plan' }, 'Chưa có ID')]),
         h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.customer_name, b.key_at && dmy(b.key_at)].filter(Boolean).join(' · ')));
-    }) : [h('div', { class: 'empty' }, 'Chưa có mạch nào')]));
+    }) : [h('div', { class: 'empty' }, 'Chưa có mạch nào. Mạch được thêm khi Lấy ID, hoặc bấm "+ Thêm mạch" để nhập UID trước.')]));
   }).catch(() => {});
   let t;
   q.addEventListener('input', () => { boardQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const stSel = h('select', { onchange: e => { boardSt = e.target.value; load(); } }, h('option', { value: '' }, 'Mọi trạng thái'),
     Object.entries(BSTATUS).map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)));
-  return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Danh sách mạch'), q, h('div', { class: 'row' }, stSel, printBtn), box, boardLegend()) };
+  return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'), q, h('div', { class: 'row' }, stSel, printBtn,
+    can('boards.save') && h('button', { class: 'btn ghost', onclick: () => boardEdit({}) }, '+ Thêm mạch')),
+    onPick && h('p', { class: 'small muted' }, 'Bấm 1 mạch chưa có ID (biểu tượng mờ) để đưa UID lên ô Lấy ID phía trên.'), box, boardLegend()) };
 }
 async function boardDetail(uid) {
   const b = await api('boards.get', { uid });
