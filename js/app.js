@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.6';
+const APP_VERSION = 'LED Factory 0.7';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -397,12 +397,14 @@ function printLabels(boards) {
 // ---------- MẠCH (mục cũ, giữ nguyên nội dung; nằm trong trang Lấy ID, tiêu đề "Nhập UID (chưa lấy ID)") ----------
 let boardQ = '', boardSt = '';
 function boardsCard(onPick) {
-  const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh sản xuất, số phiếu bán…', value: boardQ });
+  const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh, phiếu bán… hoặc gõ: chưa ID / đã ID', value: boardQ });
   const box = h('div', { class: 'list' });
   let rows = [], picked = new Set();
   const printBtn = h('button', { class: 'btn ghost', onclick: () => printLabels(rows.filter(b => picked.has(b.id))) }, '🏷 In tem đã chọn');
-  // boardSt: trạng thái (stock/sold/…) hoặc 'no_key' = Chưa lấy ID, 'has_key' = Đã lấy ID
-  const load = () => api('boards.list', { q: boardQ, limit: 300, ...(boardSt === 'no_key' ? { no_key: 1 } : boardSt === 'has_key' ? { has_key: 1 } : { status: boardSt }) }).then(r => {
+  // ô tìm: gõ "chưa ID" / "đã ID" (có dấu hay không) = lọc theo ID; phần chữ còn lại tìm như thường (UID, khách, lệnh, phiếu)
+  const idFilter = () => { const v = vn(boardQ), m = v.match(/(chua|da)\s*(lay\s*)?id/);
+    return { q: m ? boardQ.slice(0, m.index).concat(boardQ.slice(m.index + m[0].length)).trim() : boardQ, f: m ? (m[1] === 'chua' ? { no_key: 1 } : { has_key: 1 }) : {} }; };
+  const load = () => { const x = idFilter(); return api('boards.list', { q: x.q, status: boardSt, limit: 300, ...x.f }).then(r => {
     rows = r; picked = new Set([...picked].filter(id => rows.some(b => b.id === id)));
     printBtn.textContent = T('🏷 In tem đã chọn') + (picked.size ? ` (${picked.size})` : '');
     box.replaceChildren(...(rows.length ? rows.map(b => {
@@ -410,12 +412,11 @@ function boardsCard(onPick) {
       return h('div', { class: 'item', onclick: () => (onPick && !b.key_id) ? onPick(b) : boardDetail(b.uid) }, h('div', { class: 'l', style: 'display:flex;gap:6px;align-items:center' }, cb, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
         h('div', { class: 'r' }, bchip(b.status), b.key_id ? '' : [h('br'), h('span', { class: 'chip plan' }, 'Chưa có ID')]),
         h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.customer_name, b.key_at && dmy(b.key_at)].filter(Boolean).join(' · ')));
-    }) : [h('div', { class: 'empty' }, 'Chưa có mạch nào. Mạch được thêm khi Lấy ID, hoặc bấm "+ Thêm mạch" để nhập UID trước.')]));
-  }).catch(() => {});
+    }) : [h('div', { class: 'empty' }, 'Không có mạch nào khớp. Mạch được thêm khi Lấy ID, hoặc bấm "+ Thêm mạch" để nhập UID trước.')]));
+  }).catch(() => {}); };
   let t;
   q.addEventListener('input', () => { boardQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const stSel = h('select', { onchange: e => { boardSt = e.target.value; load(); } }, h('option', { value: '' }, 'Mọi trạng thái'),
-    [['no_key', 'Chưa lấy ID'], ['has_key', 'Đã lấy ID']].map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)),
     Object.entries(BSTATUS).map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)));
   return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'), q, h('div', { class: 'row' }, stSel, printBtn,
     can('boards.save') && h('button', { class: 'btn ghost', onclick: () => boardEdit({}) }, '+ Thêm mạch')),
