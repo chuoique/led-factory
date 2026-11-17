@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.15';
+const APP_VERSION = 'LED Factory 0.16';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1049,7 +1049,7 @@ async function vHelpers(el) {
   const rows = r.helpers || [];
   el.replaceChildren(h('div', { class: 'card' }, accSeg('helpers'),
     h('p', { class: 'small muted' }, 'Máy tính Windows đã cài "LED Factory Trợ giúp": máy chủ xem và điều khiển màn hình, chạy lệnh, cập nhật trợ giúp. Cài trên máy cần hỗ trợ: Hệ thống → Kết nối → Tải trợ giúp từ xa, rồi Ghép trợ giúp với máy chủ.'),
-    !r.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ mở được trên chính máy chủ:', ' ', h('b', {}, `http://127.0.0.1:${r.http_port}`)),
+    !r.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ dùng được khi mở app ngay trên máy chủ (kết nối nội bộ).'),
     h('div', { class: 'list' }, rows.length ? rows.map(d => {
       const st = d.state || {};
       return h('div', { class: 'item', onclick: () => helperSheet(d, r) },
@@ -1072,7 +1072,7 @@ function helperSheet(d, info) {
       h('dt', {}, 'Hỏi trước khi điều khiển'), h('dd', {}, st.ask === undefined ? '—' : st.ask ? 'Có' : 'Không'),
       h('dt', {}, 'Tự chạy cùng Windows'), h('dd', {}, st.autorun === undefined ? '—' : st.autorun ? 'Bật' : 'Tắt'),
       h('dt', {}, 'Mã máy'), h('dd', { class: 'mono' }, d.id)),
-    !info.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ mở được trên chính máy chủ:', ' ', h('b', {}, `http://127.0.0.1:${info.http_port}`)),
+    !info.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ dùng được khi mở app ngay trên máy chủ (kết nối nội bộ).'),
     info.local && !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt hoặc mất mạng).')),
     info.local && d.online ? [
       h('button', { class: 'btn', onclick: () => { close(); rdViewer(d); } }, '🖥 Xem & điều khiển'),
@@ -1138,7 +1138,7 @@ function rdViewer(d) {
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
   };
-  const start = () => api('helper.view', { id: d.id, ...q }).then(r => { if (!closed) img.src = r.url; }).catch(() => {});
+  const start = () => api('helper.view', { id: d.id, ...q }).then(r => { if (!closed) img.src = (Conn.lanBase() || '') + r.url; }).catch(() => {});
   const qual = h('select', { style: 'width:auto', onchange: () => { const [s, qq, f] = qual.value.split(','); q = { scale: +s, q: +qq, fps: +f }; try { localStorage.setItem('lf-rd-q', JSON.stringify(q)); } catch (e) {} start(); } },
     [['100,70,8', 'Nét'], ['100,55,8', 'Vừa'], ['70,50,6', 'Nhanh'], ['50,45,4', 'Mạng yếu']].map(([v, l]) => h('option', { value: v, selected: v === `${q.scale},${q.q},${q.fps}` }, l)));
   const vo = h('input', { type: 'checkbox', style: 'width:auto', onchange: () => { viewOnly = vo.checked; img.style.cursor = viewOnly ? 'default' : 'crosshair'; } });

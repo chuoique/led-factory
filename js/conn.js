@@ -535,6 +535,11 @@ return {
   cutP2P() { if (p2pOpen()) failP2P('thử cắt'); },
   killChannel() { if (!active) return; killed = active; killed.client.end(); onDown(killed); },
   reviveChannel() { if (!killed) return; const i = brokers.indexOf(killed); if (i >= 0) brokers[i] = makeChannel(LIST.find(d => d.name === killed.name)); killed = null; changed(); },
+  // Gốc địa chỉ máy chủ nội bộ cho tài nguyên không đi qua kênh (ảnh trợ giúp từ xa): '' = trang mở từ chính máy chủ
+  lanBase() {
+    const own = isPrivate(location.hostname) && [String(LAN_HTTP), String(LAN_HTTPS)].includes(location.port);
+    return own ? '' : lanOk() ? `https://${lan.host}:${LAN_HTTPS}` : null;
+  },
   LAN_HTTP, LAN_HTTPS, isPrivate,
 };
 })();
