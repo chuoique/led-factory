@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.7';
+const APP_VERSION = 'LED Factory 0.8';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -161,14 +161,14 @@ function screenConnecting() {
 // ---------- khung chính theo vai trò ----------
 // "Lấy ID" đặt ngay cạnh "Hệ thống" (yêu cầu): mục cuối trước Hệ thống
 const TABS = {
-  owner: ['production', 'parts', 'purchases', 'sales', 'reports', 'cash', 'staff', 'keys', 'system'],
-  store: ['parts', 'purchases', 'production', 'system'],
-  tech:  ['production', 'parts', 'keys', 'system'],
+  owner: ['production', 'keys', 'parts', 'purchases', 'sales', 'cash', 'reports', 'staff', 'system'],
+  store: ['production', 'parts', 'purchases', 'system'],
+  tech:  ['production', 'keys', 'parts', 'system'],
   sales: ['sales', 'keys', 'system'],
 };
 const TAB = {
   production: ['🛠', 'Sản xuất'], parts: ['🏬', 'Kho'], purchases: ['📥', 'Mua vào'], sales: ['🧾', 'Bán ra'],
-  reports: ['📊', 'Báo cáo'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
+  reports: ['📊', 'Thống kê'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
 };
 function connBadge() {
   const d = Conn.diag();
@@ -918,7 +918,7 @@ async function saleDetail(id) {
      } }, 'Hủy phiếu')]);
 }
 
-// ---------- BÁO CÁO ----------
+// ---------- THỐNG KÊ (trước là Báo cáo) ----------
 let repRange = 'month';
 async function vReports(el) {
   const [from, to] = rangeOf(repRange);
