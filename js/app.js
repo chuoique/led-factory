@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.12';
+const APP_VERSION = 'LED Factory 0.13';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1043,6 +1043,7 @@ function deviceSheet(d) {
 
 // ---------- TRỢ GIÚP TỪ XA: máy chủ xem / điều khiển máy tính cài "LED Factory Trợ giúp" (helper/) ----------
 // Chỉ chiều máy chủ → máy trợ giúp. Xem / điều khiển / chạy lệnh chỉ mở được trên chính máy chủ (127.0.0.1): máy chủ kiểm tra.
+const HPATH = { 1: 'Nội bộ', 2: 'P2P qua Internet', 3: 'Internet chậm (chưa P2P)' };
 async function vHelpers(el) {
   const r = await api('helper.list');
   const rows = r.helpers || [];
@@ -1054,7 +1055,7 @@ async function vHelpers(el) {
       return h('div', { class: 'item', onclick: () => helperSheet(d, r) },
         h('div', { class: 'l' }, h('span', { class: 'dot ' + (d.online ? 'lan' : '') })),
         h('div', { class: 't' }, d.name),
-        h('div', { class: 'r small' }, d.online ? (st.rd === 1 ? 'Đang hỗ trợ' : 'Sẵn sàng') : (d.last_seen ? dmy(d.last_seen) : '—')),
+        h('div', { class: 'r small' }, d.online ? (st.rd === 1 ? 'Đang hỗ trợ' : HPATH[d.path] || 'Sẵn sàng') : (d.last_seen ? dmy(d.last_seen) : '—')),
         h('div', { class: 's' }, [st.user, st.w ? `${st.w} x ${st.h}` : '', st.ver ? `${T('bản')} ${st.ver}` : ''].filter(Boolean).join(' · ') || d.id));
     }) : h('div', { class: 'empty' }, 'Chưa có máy nào cài trợ giúp'))));
 }
@@ -1064,7 +1065,7 @@ function helperSheet(d, info) {
   const upd = h('button', { class: 'btn ghost', onclick: () => busy(upd, api('helper.update', { id: d.id }).then(() => toast('Đã gửi bản cập nhật'))).catch(() => {}) }, old ? '⬆ Cập nhật trợ giúp' : '↻ Cài lại bản mới nhất');
   close = sheet(d.name, h('div', { style: 'display:grid;gap:10px' },
     h('dl', { class: 'kv' },
-      h('dt', {}, 'Trạng thái'), h('dd', {}, d.online ? 'Đang kết nối (nội bộ)' : 'Không kết nối'),
+      h('dt', {}, 'Trạng thái'), h('dd', {}, d.online ? HPATH[d.path] || 'Đang kết nối' : 'Không kết nối'),
       h('dt', {}, 'Người dùng Windows'), h('dd', {}, st.user || '—'),
       h('dt', {}, 'Màn hình'), h('dd', {}, st.w ? `${st.w} x ${st.h}` : '—'),
       h('dt', {}, 'Phiên bản'), h('dd', {}, st.ver ? `${st.ver}${old ? ' → ' + info.avail_ver : ''}` : '—'),
@@ -1072,7 +1073,7 @@ function helperSheet(d, info) {
       h('dt', {}, 'Tự chạy cùng Windows'), h('dd', {}, st.autorun === undefined ? '—' : st.autorun ? 'Bật' : 'Tắt'),
       h('dt', {}, 'Mã máy'), h('dd', { class: 'mono' }, d.id)),
     !info.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ mở được trên chính máy chủ:', ' ', h('b', {}, `http://127.0.0.1:${info.http_port}`)),
-    info.local && !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt, hoặc không cùng mạng nội bộ).')),
+    info.local && !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt hoặc mất mạng).')),
     info.local && d.online ? [
       h('button', { class: 'btn', onclick: () => { close(); rdViewer(d); } }, '🖥 Xem & điều khiển'),
       h('button', { class: 'btn ghost', onclick: () => { close(); execSheet(d); } }, '⌨ Chạy lệnh'), upd,
@@ -1114,13 +1115,12 @@ function helperCard() {
     toast('Đang tải LedFactoryHelper.msi - mở file để cài');
   };
   const pairBtn = h('button', { class: 'btn ghost small', onclick: () => busy(pairBtn, api('helper.pair_code', {}).then(r => {
-    if (!r.lan || !r.lan.length) { toast('Máy chủ chưa có địa chỉ mạng nội bộ', true); return; }
-    location.href = `lfhelper://pair?c=${encodeURIComponent(r.code)}&a=${r.lan.join(',')}&p=${r.port}`;
+    location.href = `lfhelper://pair?c=${encodeURIComponent(r.code)}&a=${(r.lan || []).join(',')}&p=${r.port}`;
     toast('Trình duyệt hỏi mở "LED Factory Trợ giúp" → bấm Mở');
   })).catch(() => {}) }, '🔗 Ghép trợ giúp với máy chủ');
   return h('div', { style: 'display:grid;gap:6px;margin-top:10px;border-top:1px solid rgba(127,127,127,.25);padding-top:10px' },
     h('b', {}, 'Trợ giúp từ xa (máy tính Windows)'),
-    h('p', { class: 'small muted' }, 'Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo "Windows protected your PC": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (cần cùng mạng nội bộ với máy chủ). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.'),
+    h('p', { class: 'small muted' }, 'Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo "Windows protected your PC": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (trong mạng nội bộ hoặc qua Internet). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.'),
     h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: dl }, '⬇ Tải trợ giúp từ xa'), pairBtn));
 }
 // Màn hình xem & điều khiển: ảnh MJPEG từ máy chủ (/rd/stream), chuột / phím gửi qua helper.input
@@ -1191,7 +1191,7 @@ function rdViewer(d) {
     const x = (r.helpers || []).find(z => z.id === d.id), st = (x && x.state) || {};
     status.textContent = T(!x || !x.online ? 'Máy trợ giúp mất kết nối'
       : st.rd === 2 ? 'Đang chờ người dùng bên đó bấm Cho phép…'
-      : st.rd === 1 ? (st.frame_age_ms >= 0 && st.frame_age_ms < 5000 ? (viewOnly ? 'Đang xem' : 'Đang điều khiển') : 'Đang chờ hình…')
+      : st.rd === 1 ? (st.frame_age_ms >= 0 && st.frame_age_ms < 5000 ? ${T(viewOnly ? 'Đang xem' : 'Đang điều khiển')} · ${T(HPATH[x.path] || '')} : 'Đang chờ hình…')
       : st.why === 'denied' ? 'Người dùng KHÔNG cho phép' : st.why === 'timeout' ? 'Người dùng không trả lời' : st.why ? 'Người dùng đã dừng phiên hỗ trợ' : 'Đang kết nối…');
   }).catch(() => {}), 1500);
   document.body.append(wrap);

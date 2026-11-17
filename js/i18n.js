@@ -571,7 +571,7 @@ const EN = {
   "Điện thoại, máy tính đã ghép với hệ thống để dùng app. Mỗi máy ghép một lần; người dùng đăng nhập tài khoản của mình trên máy đó. Mất máy: bấm vào máy → Thu hồi.": "Phones and computers paired with the system to use the app. Each device pairs once; users log in with their own account on it. Lost device: tap it → Revoke.",
   "+ Ghép điện thoại / máy tính": "+ Pair a phone / computer",
   "Đã thu hồi": "Revoked",
-  "Nội bộ": "Local",
+  "Nội bộ": "Local network",
   "Mã máy": "Device ID",
   "Ghép lúc": "Paired at",
   "Người dùng": "User",
@@ -676,7 +676,10 @@ const EN = {
   "Tự chạy cùng Windows": "Start with Windows",
   "Bật": "On",
   "Tắt": "Off",
-  "Máy trợ giúp không kết nối (máy tắt, hoặc không cùng mạng nội bộ).": "The support computer is not connected (turned off, or not on the same local network).",
+  "Máy trợ giúp không kết nối (máy tắt hoặc mất mạng).": "The support computer is not connected (turned off or offline).",
+  "P2P qua Internet": "P2P over the Internet",
+  "Internet chậm (chưa P2P)": "Slow Internet (no P2P yet)",
+  "Đang kết nối": "Connected",
   "🖥 Xem & điều khiển": "🖥 View & control",
   "⌨ Chạy lệnh": "⌨ Run command",
   "Chạy lệnh": "Run command",
@@ -713,10 +716,10 @@ const EN = {
   "Trình duyệt hỏi mở \"LED Factory Trợ giúp\" → bấm Mở": "The browser asks to open \"LED Factory Support\" → click Open",
   "🔗 Ghép trợ giúp với máy chủ": "🔗 Pair support with the server",
   "Trợ giúp từ xa (máy tính Windows)": "Remote support (Windows computers)",
-  "Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo \"Windows protected your PC\": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (cần cùng mạng nội bộ với máy chủ). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.": "Lets the server view and control this computer and run commands for support; it starts with Windows, has an icon in the system tray and updates itself from the server. Step 1: download and open the installer (Windows may warn \"Windows protected your PC\": click More info → Run anyway). Step 2: click Pair support with the server (must be on the same local network as the server). Each time the server wants to view, this computer asks for permission.",
+  "Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo \"Windows protected your PC\": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (trong mạng nội bộ hoặc qua Internet). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.": "Lets the server view and control this computer and run commands for support; it starts with Windows, has an icon in the system tray and updates itself from the server. Step 1: download and open the installer (Windows may warn \"Windows protected your PC\": click More info → Run anyway). Step 2: click Pair support with the server (on the local network or over the Internet). Each time the server wants to view, this computer asks for permission.",
   "⬇ Tải trợ giúp từ xa": "⬇ Download remote support",
   "Không tìm thấy máy trợ giúp": "Support computer not found",
-  "Máy trợ giúp không kết nối (máy tắt, hoặc không cùng mạng nội bộ)": "The support computer is not connected (turned off, or not on the same local network)",
+  "Máy trợ giúp không kết nối (máy tắt hoặc mất mạng)": "The support computer is not connected (turned off or offline)",
   "Sai loại thao tác": "Invalid action",
   "Chữ quá dài": "Text too long",
   "Máy trợ giúp không kết nối": "The support computer is not connected",
@@ -798,6 +801,7 @@ const RX = [
   [/^(\d+) file nhật ký không mở được \(khác mật khẩu sao lưu\?\)$/, '$1 log files could not be opened (different backup password?)'],
   [/^Không tải được: (.+)$/, (m, a) => 'Could not load: ' + tr(a)],
 ];
+
 
 
 
