@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.5';
+const APP_VERSION = 'LED Factory 0.6';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -401,7 +401,8 @@ function boardsCard(onPick) {
   const box = h('div', { class: 'list' });
   let rows = [], picked = new Set();
   const printBtn = h('button', { class: 'btn ghost', onclick: () => printLabels(rows.filter(b => picked.has(b.id))) }, '🏷 In tem đã chọn');
-  const load = () => api('boards.list', { q: boardQ, status: boardSt, limit: 300 }).then(r => {
+  // boardSt: trạng thái (stock/sold/…) hoặc 'no_key' = Chưa lấy ID, 'has_key' = Đã lấy ID
+  const load = () => api('boards.list', { q: boardQ, limit: 300, ...(boardSt === 'no_key' ? { no_key: 1 } : boardSt === 'has_key' ? { has_key: 1 } : { status: boardSt }) }).then(r => {
     rows = r; picked = new Set([...picked].filter(id => rows.some(b => b.id === id)));
     printBtn.textContent = T('🏷 In tem đã chọn') + (picked.size ? ` (${picked.size})` : '');
     box.replaceChildren(...(rows.length ? rows.map(b => {
@@ -414,6 +415,7 @@ function boardsCard(onPick) {
   let t;
   q.addEventListener('input', () => { boardQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const stSel = h('select', { onchange: e => { boardSt = e.target.value; load(); } }, h('option', { value: '' }, 'Mọi trạng thái'),
+    [['no_key', 'Chưa lấy ID'], ['has_key', 'Đã lấy ID']].map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)),
     Object.entries(BSTATUS).map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)));
   return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'), q, h('div', { class: 'row' }, stSel, printBtn,
     can('boards.save') && h('button', { class: 'btn ghost', onclick: () => boardEdit({}) }, '+ Thêm mạch')),
