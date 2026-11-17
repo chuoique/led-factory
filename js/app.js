@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.2';
+const APP_VERSION = 'LED Factory 0.3';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -121,7 +121,7 @@ function screenPair(msg) {
   };
   $('#app').replaceChildren(h('div', { class: 'wrap center' }, h('div', { class: 'card' },
     LOGO(), h('h1', {}, 'Ghép máy với hệ thống'),
-    h('p', { class: 'muted small' }, 'Nhập mã ghép máy do quản trị tạo (mục Thiết bị), hoặc mã khởi tạo in trên cửa sổ máy chủ khi chạy lần đầu. Mỗi máy chỉ cần ghép một lần.'),
+    h('p', { class: 'muted small' }, 'Nhập mã ghép máy do quản trị tạo (Tài khoản → Điện thoại / máy tính), hoặc mã khởi tạo in trên cửa sổ máy chủ khi chạy lần đầu. Mỗi máy chỉ cần ghép một lần.'),
     field('Mã ghép máy', code), field('Tên máy này', name), btn, st,
     h('p', { class: 'small muted' }, APP_VERSION))));
 }
@@ -161,14 +161,14 @@ function screenConnecting() {
 // ---------- khung chính theo vai trò ----------
 // "Lấy ID" đặt ngay cạnh "Hệ thống" (yêu cầu): mục cuối trước Hệ thống
 const TABS = {
-  owner: ['production', 'boards', 'parts', 'purchases', 'sales', 'reports', 'cash', 'staff', 'devices', 'keys', 'system'],
+  owner: ['production', 'boards', 'parts', 'purchases', 'sales', 'reports', 'cash', 'staff', 'keys', 'system'],
   store: ['parts', 'purchases', 'production', 'system'],
   tech:  ['production', 'boards', 'parts', 'keys', 'system'],
   sales: ['sales', 'boards', 'system'],
 };
 const TAB = {
   production: ['🛠', 'Sản xuất'], boards: ['🔲', 'Mạch'], parts: ['🏬', 'Kho'], purchases: ['📥', 'Mua vào'], sales: ['🧾', 'Bán ra'],
-  reports: ['📊', 'Báo cáo'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], devices: ['📱', 'Thiết bị'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
+  reports: ['📊', 'Báo cáo'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
 };
 function connBadge() {
   const d = Conn.diag();
@@ -923,10 +923,13 @@ async function vReports(el) {
 }
 
 // ---------- TÀI KHOẢN (vai trò sản xuất) ----------
+// Tab Tài khoản: 2 mục - tài khoản người dùng / điện thoại, máy tính đã ghép (trước là tab Thiết bị)
+const accSeg = cur => segBar(cur, [['users', '👥 Tài khoản'], ['devices', '📱 Điện thoại / máy tính']], k => { S.accTab = k; go('staff'); });
 async function vStaff(el) {
+  if (S.accTab === 'devices') return vDevices(el);
   const ORDER = { chairman: 0, ceo: 1, owner: 2, store: 3, tech: 4, sales: 5 };
   const rows = (await api('staff.list')).sort((a, b) => ((ORDER[a.role] ?? 9) - (ORDER[b.role] ?? 9)) || String(a.display_name || a.username).localeCompare(String(b.display_name || b.username), 'vi'));
-  el.replaceChildren(h('div', { class: 'card' }, h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
+  el.replaceChildren(h('div', { class: 'card' }, accSeg('users'), h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
     h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Lấy ID. Bán hàng: khách, phiếu bán.'),
     h('div', { class: 'list' }, rows.map(u => h('div', { class: 'item', onclick: () => staffEdit(u) },
       h('div', { class: 'l' }, RANK[u.role] ? '👑' : '👤'), h('div', { class: 't' }, u.display_name || u.username),
@@ -982,19 +985,20 @@ function quickSearch() {
   close = sheet('Tìm nhanh', h('div', { style: 'display:grid;gap:10px' }, q, box));
 }
 
-// ---------- thiết bị ----------
+// ---------- điện thoại / máy tính đã ghép (trong tab Tài khoản) ----------
 async function vDevices(el) {
   const rows = (await api('devices.list')).filter(d => !d.revoked);   // máy đã thu hồi: không hiện nữa
   const code = purpose => api('devices.pair_code', { purpose }).then(r => {
     const end = Date.now() + r.expires_min * 60000;
     const left = h('p', { class: 'small muted' });
     const tm = setInterval(() => { const s = Math.max(0, Math.round((end - Date.now()) / 1000)); left.textContent = T(s ? `Hết hạn sau ${Math.floor(s / 60)}:${pad(s % 60)}` : 'Đã hết hạn'); if (!s) clearInterval(tm); }, 1000);
-    sheet(purpose === 'customer' ? 'Mã ghép máy cho khách' : 'Mã ghép máy nhân viên', h('div', { style: 'display:grid;gap:10px;text-align:center' },
+    sheet('Mã ghép điện thoại / máy tính', h('div', { style: 'display:grid;gap:10px;text-align:center' },
       h('div', { class: 'big', style: 'font-size:30px' }, r.code), left,
       h('p', { class: 'small muted' }, 'Trên máy mới: mở app LED Factory → nhập mã này. Mã chỉ dùng được một lần.')));
   }).catch(() => {});
-  el.replaceChildren(h('div', { class: 'card' },
-    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => code('staff') }, '+ Ghép máy nhân viên')),
+  el.replaceChildren(h('div', { class: 'card' }, accSeg('devices'),
+    h('p', { class: 'small muted' }, 'Điện thoại, máy tính đã ghép với hệ thống để dùng app. Mỗi máy ghép một lần; người dùng đăng nhập tài khoản của mình trên máy đó. Mất máy: bấm vào máy → Thu hồi.'),
+    h('div', { class: 'row' }, h('button', { class: 'btn', onclick: () => code('staff') }, '+ Ghép điện thoại / máy tính')),
     h('div', { class: 'list' }, rows.map(d => h('div', { class: 'item', onclick: () => deviceSheet(d) },
       h('div', { class: 'l' }, h('span', { class: 'dot ' + (d.revoked ? 'none' : d.online ? (d.online.lan ? 'lan' : d.online.p2p ? 'p2p' : 'channel') : '') })),
       h('div', { class: 't' }, d.name, d.this ? ' (máy này)' : ''),
@@ -1008,8 +1012,8 @@ function deviceSheet(d) {
     h('dl', { class: 'kv' }, h('dt', {}, 'Mã máy'), h('dd', { class: 'mono' }, d.id), h('dt', {}, 'Ghép lúc'), h('dd', {}, d.created_at ? `${dmy(d.created_at)} ${hm(d.created_at)}` : '—'),
       h('dt', {}, 'Người dùng'), h('dd', {}, d.user || '—'), h('dt', {}, 'Lần cuối'), h('dd', {}, d.last_seen ? `${dmy(d.last_seen)} ${hm(d.last_seen)}` : '—')),
     field('Tên máy', name)),
-    [h('button', { class: 'btn', onclick: () => api('devices.rename', { id: d.id, name: name.value.trim() }).then(() => { close(); go('devices'); }).catch(() => {}) }, 'Đổi tên'),
-     !d.this && !d.revoked && h('button', { class: 'btn bad', onclick: () => { if (window.confirm(T(`Thu hồi "${d.name}"? Máy này sẽ không kết nối được nữa.`))) api('devices.revoke', { id: d.id }).then(() => { toast('Đã thu hồi'); close(); go('devices'); }).catch(() => {}); } }, 'Thu hồi')]);
+    [h('button', { class: 'btn', onclick: () => api('devices.rename', { id: d.id, name: name.value.trim() }).then(() => { close(); go('staff'); }).catch(() => {}) }, 'Đổi tên'),
+     !d.this && !d.revoked && h('button', { class: 'btn bad', onclick: () => { if (window.confirm(T(`Thu hồi "${d.name}"? Máy này sẽ không kết nối được nữa.`))) api('devices.revoke', { id: d.id }).then(() => { toast('Đã thu hồi'); close(); go('staff'); }).catch(() => {}); } }, 'Thu hồi')]);
 }
 
 // ---------- thu chi ----------
@@ -1314,7 +1318,7 @@ function unpair() {
 }
 
 const VIEWS = { production: vProduction, boards: vBoards, parts: vParts, purchases: vPurchases, sales: vSales, reports: vReports,
-  cash: vCash, staff: vStaff, devices: vDevices, keys: vKeys, system: vSystem };
+  cash: vCash, staff: vStaff, devices: el => { S.accTab = 'devices'; return vStaff(el); }, keys: vKeys, system: vSystem };
 
 // ---------- khởi động ----------
 Conn.on('welcome', m => {
