@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.16';
+const APP_VERSION = 'LED Factory 0.17';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1042,14 +1042,13 @@ function deviceSheet(d) {
 }
 
 // ---------- TRỢ GIÚP TỪ XA: máy chủ xem / điều khiển máy tính cài "LED Factory Trợ giúp" (helper/) ----------
-// Chỉ chiều máy chủ → máy trợ giúp. Xem / điều khiển / chạy lệnh chỉ mở được trên chính máy chủ (127.0.0.1): máy chủ kiểm tra.
+// Chỉ chiều hệ thống → máy trợ giúp. Xem / điều khiển / chạy lệnh: tài khoản quản lý, từ máy chủ hoặc điện thoại / máy tính khác (máy chủ kiểm tra quyền).
 const HPATH = { 1: 'Nội bộ', 2: 'P2P qua Internet', 3: 'Internet chậm (chưa P2P)' };
 async function vHelpers(el) {
   const r = await api('helper.list');
   const rows = r.helpers || [];
   el.replaceChildren(h('div', { class: 'card' }, accSeg('helpers'),
     h('p', { class: 'small muted' }, 'Máy tính Windows đã cài "LED Factory Trợ giúp": máy chủ xem và điều khiển màn hình, chạy lệnh, cập nhật trợ giúp. Cài trên máy cần hỗ trợ: Hệ thống → Kết nối → Tải trợ giúp từ xa, rồi Ghép trợ giúp với máy chủ.'),
-    !r.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ dùng được khi mở app ngay trên máy chủ (kết nối nội bộ).'),
     h('div', { class: 'list' }, rows.length ? rows.map(d => {
       const st = d.state || {};
       return h('div', { class: 'item', onclick: () => helperSheet(d, r) },
@@ -1072,9 +1071,8 @@ function helperSheet(d, info) {
       h('dt', {}, 'Hỏi trước khi điều khiển'), h('dd', {}, st.ask === undefined ? '—' : st.ask ? 'Có' : 'Không'),
       h('dt', {}, 'Tự chạy cùng Windows'), h('dd', {}, st.autorun === undefined ? '—' : st.autorun ? 'Bật' : 'Tắt'),
       h('dt', {}, 'Mã máy'), h('dd', { class: 'mono' }, d.id)),
-    !info.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ dùng được khi mở app ngay trên máy chủ (kết nối nội bộ).'),
-    info.local && !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt hoặc mất mạng).')),
-    info.local && d.online ? [
+    !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt hoặc mất mạng).')),
+    d.online ? [
       h('button', { class: 'btn', onclick: () => { close(); rdViewer(d); } }, '🖥 Xem & điều khiển'),
       h('button', { class: 'btn ghost', onclick: () => { close(); execSheet(d); } }, '⌨ Chạy lệnh'), upd,
       st.autorun !== undefined && h('button', { class: 'btn ghost', onclick: e => busy(e.target, api('helper.autostart', { id: d.id, on: !st.autorun }).then(() => {
@@ -1123,13 +1121,18 @@ function helperCard() {
     h('p', { class: 'small muted' }, 'Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo "Windows protected your PC": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (trong mạng nội bộ hoặc qua Internet). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.'),
     h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: dl }, '⬇ Tải trợ giúp từ xa'), pairBtn));
 }
-// Màn hình xem & điều khiển: ảnh MJPEG từ máy chủ (/rd/stream), chuột / phím gửi qua helper.input
+// Màn hình xem & điều khiển.
+//  - Có đường nội bộ tới máy chủ: ảnh MJPEG thẳng từ máy chủ (/rd/stream, nhanh nhất).
+//  - Ở xa (P2P / Internet): lấy từng khung qua helper.frame (chia mảnh ~120 KB) trên kênh đang dùng.
+// Chuột / chạm / phím gửi qua helper.input. Điện thoại: chạm = bấm, kéo = kéo chuột, nút "Chuột phải" cho lần chạm sau.
 function rdViewer(d) {
-  let q = { fps: 8, q: 60, scale: 100 };
-  try { q = { ...q, ...JSON.parse(localStorage.getItem('lf-rd-q') || '{}') }; } catch (e) {}
-  let viewOnly = false, closed = false, lastMove = 0, moveTimer = null;
+  const base = Conn.lanBase(), remote = base === null;
+  const KEY = remote ? 'lf-rd-q-xa' : 'lf-rd-q';
+  let q = remote ? { fps: 5, q: 50, scale: 70 } : { fps: 8, q: 60, scale: 100 };
+  try { q = { ...q, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (e) {}
+  let viewOnly = false, closed = false, lastMove = 0, moveTimer = null, rightNext = false, lastUrl = null;
   const down = new Set();
-  const img = h('img', { alt: '', draggable: false, tabindex: 0, style: 'max-width:100%;max-height:100%;display:block;cursor:default;outline:none;user-select:none;background:#000' });
+  const img = h('img', { alt: '', draggable: false, tabindex: 0, style: 'max-width:100%;max-height:100%;display:block;cursor:crosshair;outline:none;user-select:none;-webkit-user-select:none;touch-action:none;background:#000' });
   const status = h('span', { class: 'small', style: 'color:#ddd' }, 'Đang kết nối…');
   const send = (k, extra) => { if (viewOnly || closed) return; api('helper.input', { id: d.id, k, ...extra }, true).catch(() => {}); };
   const pos = e => {
@@ -1138,12 +1141,47 @@ function rdViewer(d) {
     const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
     return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
   };
-  const start = () => api('helper.view', { id: d.id, ...q }).then(r => { if (!closed) img.src = (Conn.lanBase() || '') + r.url; }).catch(() => {});
-  const qual = h('select', { style: 'width:auto', onchange: () => { const [s, qq, f] = qual.value.split(','); q = { scale: +s, q: +qq, fps: +f }; try { localStorage.setItem('lf-rd-q', JSON.stringify(q)); } catch (e) {} start(); } },
-    [['100,70,8', 'Nét'], ['100,55,8', 'Vừa'], ['70,50,6', 'Nhanh'], ['50,45,4', 'Mạng yếu']].map(([v, l]) => h('option', { value: v, selected: v === `${q.scale},${q.q},${q.fps}` }, l)));
+  // Ở xa: vòng lấy khung. Khung lớn chia mảnh: lấy mảnh 0 (kèm tổng số mảnh) rồi các mảnh còn lại.
+  let pullGen = 0;
+  async function pull(gen) {
+    let since = 0;
+    while (!closed && gen === pullGen) {
+      const t0 = performance.now();
+      try {
+        const f = await api('helper.frame', { id: d.id, since, part: 0 }, true);
+        if (f.b64) {
+          const parts = [f.b64];
+          for (let i = 1; i < f.parts && parts.length === i; i++) {
+            const p = await api('helper.frame', { id: d.id, seq: f.seq, part: i }, true);
+            if (p.b64) parts.push(p.b64);
+          }
+          if (parts.length === f.parts && !closed && gen === pullGen) {
+            const bin = atob(parts.join('')), u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            const url = URL.createObjectURL(new Blob([u8], { type: 'image/jpeg' }));
+            img.src = url;
+            if (lastUrl) URL.revokeObjectURL(lastUrl);
+            lastUrl = url;
+            since = f.seq;
+          }
+        }
+      } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
+      const wait = 1000 / Math.max(1, q.fps) - (performance.now() - t0);
+      await new Promise(r => setTimeout(r, Math.max(60, wait)));
+    }
+  }
+  const start = () => api('helper.view', { id: d.id, ...q, pull: remote ? 1 : 0 }).then(r => {
+    if (closed) return;
+    if (remote) pull(++pullGen); else img.src = base + r.url;
+  }).catch(() => {});
+  const PRESETS = [['100,70,8', 'Nét'], ['100,55,8', 'Vừa'], ['70,50,6', 'Nhanh'], ['50,45,4', 'Mạng yếu']];
+  if (remote && !PRESETS.some(([v]) => v === `${q.scale},${q.q},${q.fps}`)) PRESETS.push([`${q.scale},${q.q},${q.fps}`, 'Mặc định']);
+  const qual = h('select', { style: 'width:auto', onchange: () => { const [s, qq, f] = qual.value.split(','); q = { scale: +s, q: +qq, fps: +f }; try { localStorage.setItem(KEY, JSON.stringify(q)); } catch (e) {} start(); } },
+    PRESETS.map(([v, l]) => h('option', { value: v, selected: v === `${q.scale},${q.q},${q.fps}` }, l)));
   const vo = h('input', { type: 'checkbox', style: 'width:auto', onchange: () => { viewOnly = vo.checked; img.style.cursor = viewOnly ? 'default' : 'crosshair'; } });
   const typed = h('input', { placeholder: T('Gõ chữ gửi sang (cả tiếng Việt)'), style: 'width:220px' });
   const combo = (label, vks) => h('button', { class: 'btn ghost small', onclick: () => { vks.forEach(v => send('kd', { vk: v })); [...vks].reverse().forEach(v => send('ku', { vk: v })); img.focus(); } }, label);
+  const rbtn = h('button', { class: 'btn ghost small', onclick: () => { rightNext = !rightNext; rbtn.classList.toggle('bad', rightNext); } }, '🖱 Chuột phải');
   const releaseAll = () => { down.forEach(v => send('ku', { vk: v })); down.clear(); };
   const onKey = e => {
     if (closed || document.activeElement === typed || document.activeElement === qual) return;
@@ -1157,6 +1195,7 @@ function rdViewer(d) {
     releaseAll();
     closed = true;
     img.src = '';
+    if (lastUrl) URL.revokeObjectURL(lastUrl);
     clearInterval(poll);
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('keyup', onKey, true);
@@ -1164,22 +1203,45 @@ function rdViewer(d) {
     api('helper.stop', { id: d.id }, true).catch(() => {});
     wrap.remove();
   };
+  // Hàng phím: màn hẹp (điện thoại) ẩn sẵn, bấm "⌨ Phím" để hiện
+  const keys = h('div', { style: `display:${innerWidth < 700 ? 'none' : 'flex'};flex-wrap:wrap;gap:6px;align-items:center;width:100%` },
+    combo('⊞ Win', [91]), combo('Alt+Tab', [18, 9]), combo('Ctrl+Shift+Esc', [17, 16, 27]),
+    combo('Enter', [13]), combo('⌫', [8]), combo('Esc', [27]), combo('Tab', [9]),
+    typed, h('button', { class: 'btn ghost small', onclick: () => { if (typed.value) { send('tx', { s: typed.value }); typed.value = ''; img.focus(); } } }, 'Gửi chữ'));
   const wrap = h('div', { style: 'position:fixed;inset:0;z-index:9999;background:#111;display:flex;flex-direction:column' },
     h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;background:#222;color:#eee' },
       h('b', {}, d.name), status, h('span', { style: 'flex:1' }),
-      qual, h('label', { class: 'small', style: 'display:flex;gap:4px;align-items:center' }, vo, 'Chỉ xem'),
-      combo('⊞ Win', [91]), combo('Alt+Tab', [18, 9]), combo('Ctrl+Shift+Esc', [17, 16, 27]),
-      typed, h('button', { class: 'btn ghost small', onclick: () => { if (typed.value) { send('tx', { s: typed.value }); typed.value = ''; img.focus(); } } }, 'Gửi chữ'),
-      h('button', { class: 'btn bad small', onclick: close }, '✕ Đóng')),
+      qual, h('label', { class: 'small', style: 'display:flex;gap:4px;align-items:center' }, vo, 'Chỉ xem'), rbtn,
+      h('button', { class: 'btn ghost small', onclick: () => { keys.style.display = keys.style.display === 'none' ? 'flex' : 'none'; } }, '⌨ Phím'),
+      h('button', { class: 'btn bad small', onclick: close }, '✕ Đóng'), keys),
     h('div', { style: 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px' }, img));
-  img.addEventListener('mousemove', e => {
+  // Chuột và chạm (pointer events): chạm = bấm trái; "Chuột phải" bật thì lần chạm / bấm kế tiếp là chuột phải
+  let pressed = null;
+  img.addEventListener('pointermove', e => {
     const p = pos(e); if (!p) return;
+    if (e.pointerType !== 'mouse' && !pressed) return;
     const now = performance.now();
     clearTimeout(moveTimer);
     if (now - lastMove > 40) { lastMove = now; send('mm', p); } else moveTimer = setTimeout(() => { lastMove = performance.now(); send('mm', p); }, 45);
   });
-  img.addEventListener('mousedown', e => { e.preventDefault(); img.focus(); const p = pos(e); if (p) send('md', { ...p, b: e.button }); });
-  img.addEventListener('mouseup', e => { e.preventDefault(); const p = pos(e); if (p) send('mu', { ...p, b: e.button }); });
+  img.addEventListener('pointerdown', e => {
+    e.preventDefault(); img.focus();
+    const p = pos(e); if (!p) return;
+    const b = rightNext ? 2 : e.button;
+    pressed = b;
+    try { img.setPointerCapture(e.pointerId); } catch (x) {}
+    if (e.pointerType !== 'mouse') send('mm', p);   /* chạm: đưa chuột tới chỗ chạm trước */
+    send('md', { ...p, b });
+  });
+  img.addEventListener('pointerup', e => {
+    e.preventDefault();
+    if (pressed === null) return;
+    const p = pos(e) || {};
+    send('mu', { ...p, b: pressed });
+    pressed = null;
+    if (rightNext) { rightNext = false; rbtn.classList.remove('bad'); }
+  });
+  img.addEventListener('pointercancel', () => { if (pressed !== null) send('mu', { b: pressed }); pressed = null; });
   img.addEventListener('contextmenu', e => e.preventDefault());
   img.addEventListener('wheel', e => { e.preventDefault(); const p = pos(e); if (p) send('wh', { ...p, d: Math.max(-1200, Math.min(1200, Math.round(-e.deltaY * (e.deltaMode ? 40 : 1.2)))) }); }, { passive: false });
   typed.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (typed.value) { send('tx', { s: typed.value }); typed.value = ''; } } });
