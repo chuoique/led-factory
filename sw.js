@@ -1,7 +1,7 @@
 // Service worker: giữ bản sao trang + thư viện trong máy.
 // Mở app luôn dùng ngay bản trong máy (nhanh, chạy được cả khi mất Internet / GitHub sập),
 // đồng thời tải bản mới ở nền cho lần mở sau.
-const CACHE = 'lf-v11';
+const CACHE = 'lf-v12';
 const FILES = [
   './',
   './index.html',
@@ -46,6 +46,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;   // MQTT, Nostr, STUN... không đi qua đây
+  if (/\/(rd|helper)\//.test(url.pathname)) return;   // hình trợ giúp từ xa (luồng liên tục) + bộ cài: không lưu
   const isPage = e.request.mode === 'navigate';
   e.respondWith(caches.open(CACHE).then(async c => {
     // Mở trang (dù địa chỉ có thêm ?… hay thiếu dấu /) -> luôn dùng trang đã lưu

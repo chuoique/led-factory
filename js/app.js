@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.11';
+const APP_VERSION = 'LED Factory 0.12';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -948,9 +948,10 @@ async function vReports(el) {
 
 // ---------- TÀI KHOẢN (vai trò sản xuất) ----------
 // Tab Tài khoản: 2 mục - tài khoản người dùng / điện thoại, máy tính đã ghép (trước là tab Thiết bị)
-const accSeg = cur => segBar(cur, [['users', '👥 Tài khoản'], ['devices', '📱 Điện thoại / máy tính']], k => { S.accTab = k; go('staff'); });
+const accSeg = cur => segBar(cur, [['users', '👥 Tài khoản'], ['devices', '📱 Điện thoại / máy tính'], ['helpers', '🖥 Trợ giúp từ xa']], k => { S.accTab = k; go('staff'); });
 async function vStaff(el) {
   if (S.accTab === 'devices') return vDevices(el);
+  if (S.accTab === 'helpers') return vHelpers(el);
   const ORDER = { chairman: 0, ceo: 1, owner: 2, store: 3, tech: 4, sales: 5 };
   const rows = (await api('staff.list')).sort((a, b) => ((ORDER[a.role] ?? 9) - (ORDER[b.role] ?? 9)) || String(a.display_name || a.username).localeCompare(String(b.display_name || b.username), 'vi'));
   el.replaceChildren(h('div', { class: 'card' }, accSeg('users'), h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
@@ -1038,6 +1039,164 @@ function deviceSheet(d) {
     field('Tên máy', name)),
     [h('button', { class: 'btn', onclick: () => api('devices.rename', { id: d.id, name: name.value.trim() }).then(() => { close(); go('staff'); }).catch(() => {}) }, 'Đổi tên'),
      !d.this && !d.revoked && h('button', { class: 'btn bad', onclick: () => { if (window.confirm(T(`Thu hồi "${d.name}"? Máy này sẽ không kết nối được nữa.`))) api('devices.revoke', { id: d.id }).then(() => { toast('Đã thu hồi'); close(); go('staff'); }).catch(() => {}); } }, 'Thu hồi')]);
+}
+
+// ---------- TRỢ GIÚP TỪ XA: máy chủ xem / điều khiển máy tính cài "LED Factory Trợ giúp" (helper/) ----------
+// Chỉ chiều máy chủ → máy trợ giúp. Xem / điều khiển / chạy lệnh chỉ mở được trên chính máy chủ (127.0.0.1): máy chủ kiểm tra.
+async function vHelpers(el) {
+  const r = await api('helper.list');
+  const rows = r.helpers || [];
+  el.replaceChildren(h('div', { class: 'card' }, accSeg('helpers'),
+    h('p', { class: 'small muted' }, 'Máy tính Windows đã cài "LED Factory Trợ giúp": máy chủ xem và điều khiển màn hình, chạy lệnh, cập nhật trợ giúp. Cài trên máy cần hỗ trợ: Hệ thống → Kết nối → Tải trợ giúp từ xa, rồi Ghép trợ giúp với máy chủ.'),
+    !r.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ mở được trên chính máy chủ:', ' ', h('b', {}, `http://127.0.0.1:${r.http_port}`)),
+    h('div', { class: 'list' }, rows.length ? rows.map(d => {
+      const st = d.state || {};
+      return h('div', { class: 'item', onclick: () => helperSheet(d, r) },
+        h('div', { class: 'l' }, h('span', { class: 'dot ' + (d.online ? 'lan' : '') })),
+        h('div', { class: 't' }, d.name),
+        h('div', { class: 'r small' }, d.online ? (st.rd === 1 ? 'Đang hỗ trợ' : 'Sẵn sàng') : (d.last_seen ? dmy(d.last_seen) : '—')),
+        h('div', { class: 's' }, [st.user, st.w ? `${st.w} x ${st.h}` : '', st.ver ? `${T('bản')} ${st.ver}` : ''].filter(Boolean).join(' · ') || d.id));
+    }) : h('div', { class: 'empty' }, 'Chưa có máy nào cài trợ giúp'))));
+}
+function helperSheet(d, info) {
+  const st = d.state || {}, old = st.ver && info.avail_ver > st.ver;
+  let close;
+  const upd = h('button', { class: 'btn ghost', onclick: () => busy(upd, api('helper.update', { id: d.id }).then(() => toast('Đã gửi bản cập nhật'))).catch(() => {}) }, old ? '⬆ Cập nhật trợ giúp' : '↻ Cài lại bản mới nhất');
+  close = sheet(d.name, h('div', { style: 'display:grid;gap:10px' },
+    h('dl', { class: 'kv' },
+      h('dt', {}, 'Trạng thái'), h('dd', {}, d.online ? 'Đang kết nối (nội bộ)' : 'Không kết nối'),
+      h('dt', {}, 'Người dùng Windows'), h('dd', {}, st.user || '—'),
+      h('dt', {}, 'Màn hình'), h('dd', {}, st.w ? `${st.w} x ${st.h}` : '—'),
+      h('dt', {}, 'Phiên bản'), h('dd', {}, st.ver ? `${st.ver}${old ? ' → ' + info.avail_ver : ''}` : '—'),
+      h('dt', {}, 'Hỏi trước khi điều khiển'), h('dd', {}, st.ask === undefined ? '—' : st.ask ? 'Có' : 'Không'),
+      h('dt', {}, 'Tự chạy cùng Windows'), h('dd', {}, st.autorun === undefined ? '—' : st.autorun ? 'Bật' : 'Tắt'),
+      h('dt', {}, 'Mã máy'), h('dd', { class: 'mono' }, d.id)),
+    !info.local && h('p', { class: 'small', style: 'color:var(--bad)' }, 'Xem / điều khiển chỉ mở được trên chính máy chủ:', ' ', h('b', {}, `http://127.0.0.1:${info.http_port}`)),
+    info.local && !d.online && h('p', { class: 'small muted' }, 'Máy trợ giúp không kết nối (máy tắt, hoặc không cùng mạng nội bộ).')),
+    info.local && d.online ? [
+      h('button', { class: 'btn', onclick: () => { close(); rdViewer(d); } }, '🖥 Xem & điều khiển'),
+      h('button', { class: 'btn ghost', onclick: () => { close(); execSheet(d); } }, '⌨ Chạy lệnh'), upd,
+      st.autorun !== undefined && h('button', { class: 'btn ghost', onclick: e => busy(e.target, api('helper.autostart', { id: d.id, on: !st.autorun }).then(() => {
+        toast(st.autorun ? 'Đã tắt tự chạy cùng Windows' : 'Đã bật tự chạy cùng Windows'); close(); setTimeout(() => go('staff'), 800);
+      })).catch(() => {}) }, st.autorun ? '⏻ Tắt tự chạy cùng Windows' : '⏻ Bật tự chạy cùng Windows')] : null);
+}
+function execSheet(d) {
+  const cmd = h('textarea', { rows: 3, placeholder: 'ipconfig', style: 'font-family:monospace' });
+  const tmo = h('input', { type: 'number', value: 120, min: 1, max: 3600, inputmode: 'numeric' });
+  const out = h('pre', { class: 'small', style: 'white-space:pre-wrap;word-break:break-all;max-height:50vh;overflow:auto;background:rgba(127,127,127,.12);padding:8px;border-radius:8px;margin:0;font-family:monospace' });
+  const run = h('button', { class: 'btn', onclick: async () => {
+    const c = cmd.value.trim(), lim = +tmo.value || 120;
+    if (!c) return;
+    run.disabled = true;
+    out.textContent = T('Đang chạy…');
+    try {
+      const { rid } = await api('helper.exec', { id: d.id, cmd: c, timeout: lim });
+      for (;;) {
+        await new Promise(res => setTimeout(res, 1000));
+        const x = await api('helper.exec_get', { rid });
+        if (x.done) { out.textContent = `${x.out}\n[${T('mã thoát')} ${x.code}]`; break; }
+        out.textContent = `${T('Đang chạy…')} ${Math.round(x.age_s)} s`;
+        if (x.age_s > lim + 30) { out.textContent = T('Không có kết quả (máy trợ giúp mất kết nối?)'); break; }
+      }
+    } catch (e) { out.textContent = e.message; }
+    run.disabled = false;
+  } }, '▶ Chạy');
+  cmd.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) run.click(); });
+  sheet(`${T('Chạy lệnh')}: ${d.name}`, h('div', { style: 'display:grid;gap:10px' },
+    h('p', { class: 'small muted' }, 'Lệnh chạy bằng cmd trên máy đó, dưới tài khoản Windows đang đăng nhập; người dùng thấy thông báo. Mở chương trình có cửa sổ: start "" "đường dẫn". Ctrl+Enter để chạy.'),
+    field('Lệnh', cmd), field('Tối đa (giây)', tmo), out), [run]);
+}
+// Trong Hệ thống → Kết nối (chỉ máy Windows): tải bộ cài + ghép trợ giúp của CHÍNH máy này với máy chủ
+function helperCard() {
+  const dl = () => {
+    const a = h('a', { href: 'helper/LedFactoryHelper.msi', download: 'LedFactoryHelper.msi' });
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Đang tải LedFactoryHelper.msi - mở file để cài');
+  };
+  const pairBtn = h('button', { class: 'btn ghost small', onclick: () => busy(pairBtn, api('helper.pair_code', {}).then(r => {
+    if (!r.lan || !r.lan.length) { toast('Máy chủ chưa có địa chỉ mạng nội bộ', true); return; }
+    location.href = `lfhelper://pair?c=${encodeURIComponent(r.code)}&a=${r.lan.join(',')}&p=${r.port}`;
+    toast('Trình duyệt hỏi mở "LED Factory Trợ giúp" → bấm Mở');
+  })).catch(() => {}) }, '🔗 Ghép trợ giúp với máy chủ');
+  return h('div', { style: 'display:grid;gap:6px;margin-top:10px;border-top:1px solid rgba(127,127,127,.25);padding-top:10px' },
+    h('b', {}, 'Trợ giúp từ xa (máy tính Windows)'),
+    h('p', { class: 'small muted' }, 'Cho phép máy chủ xem, điều khiển máy tính này và chạy lệnh để hỗ trợ; trợ giúp tự chạy cùng Windows, biểu tượng ở khay đồng hồ, tự cập nhật từ máy chủ. Bước 1: tải và mở file cài (Windows có thể cảnh báo "Windows protected your PC": bấm More info → Run anyway). Bước 2: bấm Ghép trợ giúp với máy chủ (cần cùng mạng nội bộ với máy chủ). Mỗi lần máy chủ muốn xem, máy này sẽ hỏi Cho phép.'),
+    h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: dl }, '⬇ Tải trợ giúp từ xa'), pairBtn));
+}
+// Màn hình xem & điều khiển: ảnh MJPEG từ máy chủ (/rd/stream), chuột / phím gửi qua helper.input
+function rdViewer(d) {
+  let q = { fps: 8, q: 60, scale: 100 };
+  try { q = { ...q, ...JSON.parse(localStorage.getItem('lf-rd-q') || '{}') }; } catch (e) {}
+  let viewOnly = false, closed = false, lastMove = 0, moveTimer = null;
+  const down = new Set();
+  const img = h('img', { alt: '', draggable: false, tabindex: 0, style: 'max-width:100%;max-height:100%;display:block;cursor:default;outline:none;user-select:none;background:#000' });
+  const status = h('span', { class: 'small', style: 'color:#ddd' }, 'Đang kết nối…');
+  const send = (k, extra) => { if (viewOnly || closed) return; api('helper.input', { id: d.id, k, ...extra }, true).catch(() => {}); };
+  const pos = e => {
+    const r = img.getBoundingClientRect();
+    if (!img.naturalWidth || !r.width) return null;
+    const x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    return x < 0 || y < 0 || x > 1 || y > 1 ? null : { x: Math.round(x * 10000) / 10000, y: Math.round(y * 10000) / 10000 };
+  };
+  const start = () => api('helper.view', { id: d.id, ...q }).then(r => { if (!closed) img.src = r.url; }).catch(() => {});
+  const qual = h('select', { style: 'width:auto', onchange: () => { const [s, qq, f] = qual.value.split(','); q = { scale: +s, q: +qq, fps: +f }; try { localStorage.setItem('lf-rd-q', JSON.stringify(q)); } catch (e) {} start(); } },
+    [['100,70,8', 'Nét'], ['100,55,8', 'Vừa'], ['70,50,6', 'Nhanh'], ['50,45,4', 'Mạng yếu']].map(([v, l]) => h('option', { value: v, selected: v === `${q.scale},${q.q},${q.fps}` }, l)));
+  const vo = h('input', { type: 'checkbox', style: 'width:auto', onchange: () => { viewOnly = vo.checked; img.style.cursor = viewOnly ? 'default' : 'crosshair'; } });
+  const typed = h('input', { placeholder: T('Gõ chữ gửi sang (cả tiếng Việt)'), style: 'width:220px' });
+  const combo = (label, vks) => h('button', { class: 'btn ghost small', onclick: () => { vks.forEach(v => send('kd', { vk: v })); [...vks].reverse().forEach(v => send('ku', { vk: v })); img.focus(); } }, label);
+  const releaseAll = () => { down.forEach(v => send('ku', { vk: v })); down.clear(); };
+  const onKey = e => {
+    if (closed || document.activeElement === typed || document.activeElement === qual) return;
+    e.preventDefault(); e.stopPropagation();
+    const vk = e.keyCode;
+    if (!vk) return;
+    if (e.type === 'keydown') { down.add(vk); send('kd', { vk }); } else { down.delete(vk); send('ku', { vk }); }
+  };
+  const close = () => {
+    if (closed) return;
+    releaseAll();
+    closed = true;
+    img.src = '';
+    clearInterval(poll);
+    window.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('keyup', onKey, true);
+    window.removeEventListener('blur', releaseAll);
+    api('helper.stop', { id: d.id }, true).catch(() => {});
+    wrap.remove();
+  };
+  const wrap = h('div', { style: 'position:fixed;inset:0;z-index:9999;background:#111;display:flex;flex-direction:column' },
+    h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 10px;background:#222;color:#eee' },
+      h('b', {}, d.name), status, h('span', { style: 'flex:1' }),
+      qual, h('label', { class: 'small', style: 'display:flex;gap:4px;align-items:center' }, vo, 'Chỉ xem'),
+      combo('⊞ Win', [91]), combo('Alt+Tab', [18, 9]), combo('Ctrl+Shift+Esc', [17, 16, 27]),
+      typed, h('button', { class: 'btn ghost small', onclick: () => { if (typed.value) { send('tx', { s: typed.value }); typed.value = ''; img.focus(); } } }, 'Gửi chữ'),
+      h('button', { class: 'btn bad small', onclick: close }, '✕ Đóng')),
+    h('div', { style: 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:4px' }, img));
+  img.addEventListener('mousemove', e => {
+    const p = pos(e); if (!p) return;
+    const now = performance.now();
+    clearTimeout(moveTimer);
+    if (now - lastMove > 40) { lastMove = now; send('mm', p); } else moveTimer = setTimeout(() => { lastMove = performance.now(); send('mm', p); }, 45);
+  });
+  img.addEventListener('mousedown', e => { e.preventDefault(); img.focus(); const p = pos(e); if (p) send('md', { ...p, b: e.button }); });
+  img.addEventListener('mouseup', e => { e.preventDefault(); const p = pos(e); if (p) send('mu', { ...p, b: e.button }); });
+  img.addEventListener('contextmenu', e => e.preventDefault());
+  img.addEventListener('wheel', e => { e.preventDefault(); const p = pos(e); if (p) send('wh', { ...p, d: Math.max(-1200, Math.min(1200, Math.round(-e.deltaY * (e.deltaMode ? 40 : 1.2)))) }); }, { passive: false });
+  typed.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (typed.value) { send('tx', { s: typed.value }); typed.value = ''; } } });
+  window.addEventListener('keydown', onKey, true);
+  window.addEventListener('keyup', onKey, true);
+  window.addEventListener('blur', releaseAll);
+  const poll = setInterval(() => api('helper.list', {}, true).then(r => {
+    if (closed) return;
+    const x = (r.helpers || []).find(z => z.id === d.id), st = (x && x.state) || {};
+    status.textContent = T(!x || !x.online ? 'Máy trợ giúp mất kết nối'
+      : st.rd === 2 ? 'Đang chờ người dùng bên đó bấm Cho phép…'
+      : st.rd === 1 ? (st.frame_age_ms >= 0 && st.frame_age_ms < 5000 ? (viewOnly ? 'Đang xem' : 'Đang điều khiển') : 'Đang chờ hình…')
+      : st.why === 'denied' ? 'Người dùng KHÔNG cho phép' : st.why === 'timeout' ? 'Người dùng không trả lời' : st.why ? 'Người dùng đã dừng phiên hỗ trợ' : 'Đang kết nối…');
+  }).catch(() => {}), 1500);
+  document.body.append(wrap);
+  start();
+  img.focus();
 }
 
 // ---------- thu chi ----------
@@ -1234,7 +1393,8 @@ async function vSystem(el) {
       h('div', { class: 'row' }, h('button', { class: 'btn ghost small', onclick: () => Conn.cutLan() }, 'Thử cắt / bật nội bộ'),
         h('button', { class: 'btn ghost small', onclick: () => Conn.cutP2P() }, 'Thử cắt P2P'),
         h('button', { class: 'btn ghost small', onclick: () => Conn.killChannel() }, 'Thử hỏng kênh'),
-        h('button', { class: 'btn ghost small', onclick: () => Conn.reviveChannel() }, 'Bật lại kênh'))),
+        h('button', { class: 'btn ghost small', onclick: () => Conn.reviveChannel() }, 'Bật lại kênh')),
+      isWin && helperCard()),
     h('details', { class: 'card' }, h('summary', {}, T('Mạng nội bộ')),
       h('p', { class: 'small muted' }, knownLan.length ? `Địa chỉ đã biết: ${knownLan.join(', ')}` : 'Chưa biết địa chỉ máy chủ nội bộ.'),
       h('div', { class: 'row' }, h('div', { class: 'grow' }, lanIn), h('button', { class: 'btn ghost small', onclick: () => { if (Conn.addLan(lanIn.value.trim())) { toast('Đã thêm'); go('system'); } else toast('Địa chỉ nội bộ dạng 192.168.x.x', true); } }, 'Thêm'),
