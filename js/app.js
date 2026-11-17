@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.8';
+const APP_VERSION = 'LED Factory 0.9';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -159,7 +159,7 @@ function screenConnecting() {
 
 // ---------- khung chính theo vai trò ----------
 // ---------- khung chính theo vai trò ----------
-// "Lấy ID" đặt ngay cạnh "Hệ thống" (yêu cầu): mục cuối trước Hệ thống
+// "Tạo mã" đặt ngay cạnh "Hệ thống" (yêu cầu): mục cuối trước Hệ thống
 const TABS = {
   owner: ['production', 'keys', 'parts', 'purchases', 'sales', 'cash', 'reports', 'staff', 'system'],
   store: ['production', 'parts', 'purchases', 'system'],
@@ -168,7 +168,7 @@ const TABS = {
 };
 const TAB = {
   production: ['🛠', 'Sản xuất'], parts: ['🏬', 'Kho'], purchases: ['📥', 'Mua vào'], sales: ['🧾', 'Bán ra'],
-  reports: ['📊', 'Thống kê'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
+  reports: ['📊', 'Thống kê'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Tạo mã'], system: ['⚙️', 'Hệ thống'],
 };
 function connBadge() {
   const d = Conn.diag();
@@ -301,10 +301,10 @@ const two = (a, b) => h('div', { class: 'row' }, h('div', { class: 'grow' }, a),
 const numIn = (v, step) => h('input', { type: 'number', step: step || 'any', inputmode: 'decimal', value: v ?? '' });
 const ask = (q) => window.prompt(T(q));
 
-// ---------- LẤY ID + MẠCH (trước là 2 tab) ----------
-// 1. "Lấy ID mạch LED": ô UID (gõ / UID.TXT / bấm dòng ở mục 2) -> ký -> dòng "id" cho config.json
-// 2. "Nhập UID (chưa lấy ID)" = mục Mạch cũ GIỮ NGUYÊN (tìm, lọc, in tem, + Thêm mạch, chi tiết / dòng đời);
-//    bấm 1 mạch chưa có ID -> UID lên ô Lấy ID phía trên
+// ---------- TẠO MÃ + MẠCH (trước là 2 tab) ----------
+// 1. "Tạo mã mạch LED": ô UID (gõ / UID.TXT / bấm dòng ở mục 2) -> ký -> dòng "id" cho config.json
+// 2. "Nhập UID (chưa tạo mã)" = mục Mạch cũ GIỮ NGUYÊN (tìm, lọc, in tem, + Thêm mạch, chi tiết / dòng đời);
+//    bấm 1 mạch chưa có ID -> UID lên ô Tạo mã phía trên
 let keyCtx = { product_id: '', work_order_id: '' };
 async function vKeys(el) {
   const canIssue = can('keys.issue');
@@ -313,14 +313,14 @@ async function vKeys(el) {
   const cards = [];
   const uid = h('input', { placeholder: '36FFDB05-30473036-33562443', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false', class: 'mono' });
   const msg = h('p', { class: 'small muted' });
-  const btn = h('button', { class: 'btn', disabled: true }, 'Lấy ID');
+  const btn = h('button', { class: 'btn', disabled: true }, 'Tạo mã');
   const out = h('div', { style: 'display:grid;gap:10px' });
   const ck = () => { const ok = !!uidNorm(uid.value); btn.disabled = !ok || !st.ready; btn.style.opacity = btn.disabled ? 0.45 : 1; };
   let reloadList = () => {};
-  // bấm 1 dòng "chưa lấy ID" -> UID lên ô Lấy ID
+  // bấm 1 dòng "chưa tạo mã" -> UID lên ô Tạo mã
   const setUid = b => {
     uid.value = uidFmt(b.uid); msg.className = 'small'; msg.style.color = 'var(--ok)';
-    msg.textContent = T('Đã đưa UID lên') + (b.product_code || b.wo_number ? ` (${[b.product_code, b.wo_number].filter(Boolean).join(' · ')})` : '') + T(' – bấm Lấy ID');
+    msg.textContent = T('Đã đưa UID lên') + (b.product_code || b.wo_number ? ` (${[b.product_code, b.wo_number].filter(Boolean).join(' · ')})` : '') + T(' – bấm Tạo mã');
     ck(); uid.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (!('ontouchstart' in window)) uid.focus();
   };
   if (canIssue) {
@@ -330,7 +330,7 @@ async function vKeys(el) {
     uid.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) btn.click(); });
     const readFile = f => { if (!f) return; const r = new FileReader(); r.onload = () => {
       const u = uidFind(r.result);
-      if (u) { uid.value = uidFmt(u); msg.className = 'small'; msg.style.color = 'var(--ok)'; msg.textContent = T('Đã lấy UID từ ') + f.name + T(' – bấm Lấy ID'); }
+      if (u) { uid.value = uidFmt(u); msg.className = 'small'; msg.style.color = 'var(--ok)'; msg.textContent = T('Đã lấy UID từ ') + f.name + T(' – bấm Tạo mã'); }
       else { msg.className = 'small'; msg.style.color = 'var(--bad)'; msg.textContent = T('Không tìm thấy UID (24 ký tự hex) trong ') + f.name; }
       ck(); }; r.readAsText(f); };
     const fileIn = h('input', { type: 'file', accept: '.txt,.TXT,text/plain', style: 'display:none', onchange: e => { readFile(e.target.files[0]); e.target.value = ''; } });
@@ -345,13 +345,13 @@ async function vKeys(el) {
       copy.onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(r.line) : Promise.reject()).then(() => { copy.textContent = T('Đã copy'); })
         .catch(() => { const s = window.getSelection(), rg = document.createRange(); rg.selectNodeContents(line); s.removeAllRanges(); s.addRange(rg); try { document.execCommand('copy'); copy.textContent = T('Đã copy'); } catch (e) {} }); };
       out.replaceChildren(h('div', { class: 'card' },
-        h('div', { class: 'row' }, boardIcon(b), h('p', { style: 'color:var(--' + (r.again ? 'muted' : 'ok') + ')' }, r.again ? `Mạch ĐÃ CÓ ID (cấp ${b.key_at ? dmy(b.key_at) : ''}) – lấy lại, không tính mạch mới` : 'Mạch MỚI – đã vào Thành phẩm')),
+        h('div', { class: 'row' }, boardIcon(b), h('p', { style: 'color:var(--' + (r.again ? 'muted' : 'ok') + ')' }, r.again ? `Mạch ĐÃ CÓ ID (cấp ${b.key_at ? dmy(b.key_at) : ''}) – tạo lại mã, không tính mạch mới` : 'Mạch MỚI – đã vào Thành phẩm')),
         h('div', { class: 'mono' }, 'UID ' + uidFmt(r.uid)),
         h('p', { class: 'small muted' }, 'Dán dòng dưới vào config.json trên ổ CONFIG của mạch (thay dòng "id" cũ):'), line,
         h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'))));
       uid.value = ''; msg.textContent = ''; ck(); reloadList();
     }).catch(() => {}));
-    cards.push(h('div', { class: 'card' }, h('h2', {}, 'Lấy ID mạch LED'),
+    cards.push(h('div', { class: 'card' }, h('h2', {}, 'Tạo mã mạch LED'),
       !st.ready && h('div', { class: 'banner' }, 'Máy chủ "' + st.server + '" không cấp được ID: ' + st.why + '. Cài khoá riêng lên máy chủ này (giống key server: %LOCALAPPDATA%\\KeyServer\\ed25519_private.key) hoặc dùng máy chủ khác có khoá.'),
       two(field('Loại mạch', prod), field('Lệnh sản xuất', wo)),
       field('UID (24 ký tự hex) – gõ, chọn / kéo thả file UID.TXT, hoặc bấm 1 mạch chưa có ID ở mục bên dưới', dz), msg, btn), out);
@@ -394,15 +394,15 @@ function printLabels(boards) {
     } }, '🖨 In'));
 }
 
-// ---------- MẠCH (mục cũ, giữ nguyên nội dung; nằm trong trang Lấy ID, tiêu đề "Nhập UID (chưa lấy ID)") ----------
+// ---------- MẠCH (mục cũ, giữ nguyên nội dung; nằm trong trang Tạo mã, tiêu đề "Nhập UID (chưa tạo mã)") ----------
 let boardQ = '', boardSt = '';
 function boardsCard(onPick) {
-  const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh, phiếu bán… hoặc gõ: chưa ID / đã ID', value: boardQ });
+  const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh, phiếu bán… hoặc gõ: chưa tạo mã / đã tạo mã', value: boardQ });
   const box = h('div', { class: 'list' });
   let rows = [], picked = new Set();
   const printBtn = h('button', { class: 'btn ghost', onclick: () => printLabels(rows.filter(b => picked.has(b.id))) }, '🏷 In tem đã chọn');
-  // ô tìm: gõ "chưa ID" / "đã ID" (có dấu hay không) = lọc theo ID; phần chữ còn lại tìm như thường (UID, khách, lệnh, phiếu)
-  const idFilter = () => { const v = vn(boardQ), m = v.match(/(chua|da)\s*(lay\s*)?id/);
+  // ô tìm: gõ "chưa tạo mã" / "đã tạo mã" (hoặc "chưa ID" / "đã ID") (có dấu hay không) = lọc theo ID; phần chữ còn lại tìm như thường (UID, khách, lệnh, phiếu)
+  const idFilter = () => { const v = vn(boardQ), m = v.match(/(chua|da)\s*((lay\s*)?id|(tao\s*)?ma)\b/);
     return { q: m ? boardQ.slice(0, m.index).concat(boardQ.slice(m.index + m[0].length)).trim() : boardQ, f: m ? (m[1] === 'chua' ? { no_key: 1 } : { has_key: 1 }) : {} }; };
   const load = () => { const x = idFilter(); return api('boards.list', { q: x.q, status: boardSt, limit: 300, ...x.f }).then(r => {
     rows = r; picked = new Set([...picked].filter(id => rows.some(b => b.id === id)));
@@ -412,15 +412,15 @@ function boardsCard(onPick) {
       return h('div', { class: 'item', onclick: () => (onPick && !b.key_id) ? onPick(b) : boardDetail(b.uid) }, h('div', { class: 'l', style: 'display:flex;gap:6px;align-items:center' }, cb, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
         h('div', { class: 'r' }, bchip(b.status), b.key_id ? '' : [h('br'), h('span', { class: 'chip plan' }, 'Chưa có ID')]),
         h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.customer_name, b.key_at && dmy(b.key_at)].filter(Boolean).join(' · ')));
-    }) : [h('div', { class: 'empty' }, 'Không có mạch nào khớp. Mạch được thêm khi Lấy ID, hoặc bấm "+ Thêm mạch" để nhập UID trước.')]));
+    }) : [h('div', { class: 'empty' }, 'Không có mạch nào khớp. Mạch được thêm khi Tạo mã, hoặc bấm "+ Thêm mạch" để nhập UID trước.')]));
   }).catch(() => {}); };
   let t;
   q.addEventListener('input', () => { boardQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const stSel = h('select', { onchange: e => { boardSt = e.target.value; load(); } }, h('option', { value: '' }, 'Mọi trạng thái'),
     Object.entries(BSTATUS).map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)));
-  return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'), q, h('div', { class: 'row' }, stSel, printBtn,
+  return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa tạo mã)'), q, h('div', { class: 'row' }, stSel, printBtn,
     can('boards.save') && h('button', { class: 'btn ghost', onclick: () => boardEdit({}) }, '+ Thêm mạch')),
-    onPick && h('p', { class: 'small muted' }, 'Bấm 1 mạch chưa có ID (biểu tượng mờ) để đưa UID lên ô Lấy ID phía trên.'), box, boardLegend()) };
+    onPick && h('p', { class: 'small muted' }, 'Bấm 1 mạch chưa có ID (biểu tượng mờ) để đưa UID lên ô Tạo mã phía trên.'), box, boardLegend()) };
 }
 async function boardDetail(uid) {
   const b = await api('boards.get', { uid });
@@ -428,10 +428,10 @@ async function boardDetail(uid) {
   close = sheet('Mạch ' + uidFmt(b.uid), grid(
     h('div', { class: 'row' }, boardIcon(b, true), h('div', {}, h('div', {}, bchip(b.status), ' ', b.key_id ? h('span', { class: 'chip sold' }, 'Đã có ID') : h('span', { class: 'chip plan' }, 'Chưa có ID')),
       h('div', { class: 'small muted' }, BSTATE_T[boardState(b)]))),
-    // dòng đời: lệnh sản xuất -> Lấy ID -> bán -> bảo hành
+    // dòng đời: lệnh sản xuất -> Tạo mã -> bán -> bảo hành
     h('ul', { class: 'tl' },
       h('li', { class: b.wo_number ? 'on' : '' }, h('div', {}, h('b', {}, 'Sản xuất'), h('div', { class: 'small muted' }, b.wo_number ? `${b.wo_number}${b.product_name ? ' · ' + b.product_name : ''}` : T('chưa gắn lệnh sản xuất')))),
-      h('li', { class: b.key_at ? 'on' : '' }, h('div', {}, h('b', {}, 'Lấy ID'), h('div', { class: 'small muted' }, b.key_at ? `${dmy(b.key_at)} ${hm(b.key_at)}` : T('chưa có ID')))),
+      h('li', { class: b.key_at ? 'on' : '' }, h('div', {}, h('b', {}, 'Tạo mã'), h('div', { class: 'small muted' }, b.key_at ? `${dmy(b.key_at)} ${hm(b.key_at)}` : T('chưa có ID')))),
       h('li', { class: b.sold_at ? 'on' : '' }, h('div', {}, h('b', {}, 'Bán'), h('div', { class: 'small muted' }, b.sold_at ? `${dmy(b.sold_at)} · ${b.customer_name || T('Khách lẻ')}${b.sale_number ? ' · ' + b.sale_number : ''}` : T('còn trong kho')))),
       h('li', { class: b.warranty_until ? 'on' : '' }, h('div', {}, h('b', {}, 'Bảo hành'), h('div', { class: 'small muted' }, b.warranty_until ? `${T('đến')} ${dmy(b.warranty_until)}${b.warranty_until < Date.now() ? T(' (hết hạn)') : ''}` : '—'))),
       (b.status === 'returned' || b.status === 'scrap') && h('li', { class: 'on' }, h('div', {}, h('b', { style: 'color:var(--bad)' }, BSTATUS[b.status]), h('div', { class: 'small muted' }, b.note || '')))),
@@ -442,7 +442,7 @@ async function boardDetail(uid) {
       ['Ghi chú', b.note]]),
     b.key_id && h('details', {}, h('summary', {}, T('Dòng "id" của mạch')), h('div', { class: 'idline' }, `"id": "${b.key_id}"`))),
     [h('button', { class: 'btn', onclick: () => printLabels([b]) }, '🏷 In tem'),
-     can('keys.issue') && !b.key_id && h('button', { class: 'btn ghost', onclick: () => { close(); keyCtx = { product_id: b.product_id || '', work_order_id: b.work_order_id || '' }; go('keys'); } }, 'Lấy ID'),
+     can('keys.issue') && !b.key_id && h('button', { class: 'btn ghost', onclick: () => { close(); keyCtx = { product_id: b.product_id || '', work_order_id: b.work_order_id || '' }; go('keys'); } }, 'Tạo mã'),
      can('boards.save') && h('button', { class: 'btn ghost', onclick: () => { close(); boardEdit(b); } }, 'Sửa')]);
 }
 async function boardEdit(b) {
@@ -462,7 +462,7 @@ async function boardEdit(b) {
     if (isNew) a.uid = uid.value; else a.id = b.id;
     busy(btn, api('boards.save', a).then(r => { toast('Đã lưu'); close(); go('keys'); if (!isNew) boardDetail(r.uid); }).catch(() => {}));
   };
-  close = sheet(isNew ? 'Thêm mạch (chưa lấy ID)' : 'Sửa mạch', grid(field('UID', uid), two(field('Loại mạch', prod), field('Lệnh SX', wo)),
+  close = sheet(isNew ? 'Thêm mạch (chưa tạo mã)' : 'Sửa mạch', grid(field('UID', uid), two(field('Loại mạch', prod), field('Lệnh SX', wo)),
     two(field('Trạng thái', st), field('Firmware', fw)), field('Ghi chú (lỗi, bảo hành…)', note)), btn);
 }
 
@@ -569,8 +569,8 @@ async function woDetail(id) {
     h('h3', {}, 'Mạch của lệnh (theo UID)'),
     h('div', { class: 'list' }, (o.boards || []).length ? o.boards.map(b => h('div', { class: 'item', onclick: () => { close(); boardDetail(b.uid); } },
       h('div', { class: 'l' }, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)), h('div', { class: 'r' }, bchip(b.status)), h('div', { class: 's' }, b.key_at ? dmy(b.key_at) : ''))) :
-      h('div', { class: 'empty' }, 'Chưa có mạch: vào Lấy ID, chọn lệnh này rồi nhập UID từng mạch'))),
-    [open && can('keys.issue') && h('button', { class: 'btn ghost', onclick: () => { close(); keyCtx = { product_id: o.product_id, work_order_id: o.id }; go('keys'); } }, '🔑 Lấy ID cho lệnh này'),
+      h('div', { class: 'empty' }, 'Chưa có mạch: vào Tạo mã, chọn lệnh này rồi nhập UID từng mạch'))),
+    [open && can('keys.issue') && h('button', { class: 'btn ghost', onclick: () => { close(); keyCtx = { product_id: o.product_id, work_order_id: o.id }; go('keys'); } }, '🔑 Tạo mã cho lệnh này'),
      (o.boards || []).length && h('button', { class: 'btn ghost', onclick: () => printLabels(o.boards.map(b => ({ ...b, product_name: o.product_name, wo_number: o.number }))) }, '🏷 In tem'),
      open && can('wo.save') && h('button', { class: 'btn ghost', onclick: () => { close(); woEdit(o); } }, 'Sửa'),
      open && can('wo.finish') && h('button', { class: 'btn', onclick: () => {
@@ -584,7 +584,7 @@ async function woDetail(id) {
 // ---------- KHO LINH KIỆN ----------
 // ---------- KHO: 4 nhóm ----------
 //   Linh kiện / Vật tư: vào bằng phiếu nhập, ra khi xuất cho lệnh sản xuất (theo BOM) hoặc xuất tay
-//   Bán thành phẩm: mạch đã xuất linh kiện cho lệnh nhưng CHƯA có ID (chỉ là số đếm theo lệnh – UID quét lúc Lấy ID)
+//   Bán thành phẩm: mạch đã xuất linh kiện cho lệnh nhưng CHƯA có ID (chỉ là số đếm theo lệnh – UID quét lúc Tạo mã)
 //   Thành phẩm: mạch đã có ID còn trong kho (theo loại mạch) + hàng không theo dõi UID
 let partQ = '', partLow = 0, khoTab = 'part';
 const KHO = { part: 'Linh kiện', supply: 'Vật tư', wip: 'Bán thành phẩm', done: 'Thành phẩm' };
@@ -597,13 +597,13 @@ async function vParts(el) {
   const seg = h('div', { class: 'seg' }, Object.entries(KHO).map(([k, l]) => h('button', { class: k === khoTab ? 'on' : '', onclick: () => { khoTab = k; go('parts'); } }, l, h('span', { class: 'n' }, cnt[k]))));
   if (khoTab === 'wip') {
     el.replaceChildren(h('div', { class: 'card' }, seg,
-      h('p', { class: 'small muted' }, 'Mạch đã xuất linh kiện cho lệnh sản xuất nhưng chưa Lấy ID. Lấy ID cho mạch nào thì mạch đó chuyển sang Thành phẩm.'),
+      h('p', { class: 'small muted' }, 'Mạch đã xuất linh kiện cho lệnh sản xuất nhưng chưa tạo mã. Tạo mã cho mạch nào thì mạch đó chuyển sang Thành phẩm.'),
       h('div', { class: 'list' }, (ov.wip || []).length ? ov.wip.map(o => h('div', { class: 'item', onclick: () => woDetail(o.id) },
         h('div', { class: 'l' }, boardIcon({})), h('div', { class: 't' }, `${o.number} · ${o.product_code || o.product_name || ''}`),
         h('div', { class: 'r' }, h('b', {}, o.parts_issued - o.with_id), T(' mạch'), h('br'), wchip(o.status)),
         h('div', { class: 's' }, `${T('đã xuất linh kiện')} ${o.parts_issued}/${o.qty_plan} · ${T('đã có ID')} ${o.with_id}`))) :
         h('div', { class: 'empty' }, 'Không có mạch nào đang dở')),
-      can('keys.issue') && (ov.wip || []).length > 0 && h('button', { class: 'btn ghost', onclick: () => go('keys') }, '🔑 Sang Lấy ID'), boardLegend()));
+      can('keys.issue') && (ov.wip || []).length > 0 && h('button', { class: 'btn ghost', onclick: () => go('keys') }, '🔑 Sang Tạo mã'), boardLegend()));
     return;
   }
   if (khoTab === 'done') {
@@ -615,7 +615,7 @@ async function vParts(el) {
         h('div', { class: 'r' }, h('b', {}, num(p.n)), h('br'), h('span', { class: 'muted' }, money(p.price))),
         h('div', { class: 's' }, p.tracked !== 0 ? `${T('giá trị')} ${money(p.n * p.price)}` : T('không theo dõi UID')))),
         (ov.done_unknown || {}).n ? h('div', { class: 'item', onclick: () => finishedSheet({ name: T('Chưa gán loại mạch') }) }, h('div', { class: 'l' }, boardIcon({ key_id: 1 })),
-          h('div', { class: 't' }, 'Chưa gán loại mạch'), h('div', { class: 'r' }, h('b', {}, ov.done_unknown.n)), h('div', { class: 's' }, 'Lấy ID không chọn loại mạch – bấm để sửa từng mạch')) : null]
+          h('div', { class: 't' }, 'Chưa gán loại mạch'), h('div', { class: 'r' }, h('b', {}, ov.done_unknown.n)), h('div', { class: 's' }, 'Tạo mã không chọn loại mạch – bấm để sửa từng mạch')) : null]
         : h('div', { class: 'empty' }, 'Chưa có thành phẩm trong kho')),
       h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: () => go('keys') }, 'Xem mọi mạch (cả đã bán)')), boardLegend()));
     return;
@@ -945,7 +945,7 @@ async function vStaff(el) {
   const ORDER = { chairman: 0, ceo: 1, owner: 2, store: 3, tech: 4, sales: 5 };
   const rows = (await api('staff.list')).sort((a, b) => ((ORDER[a.role] ?? 9) - (ORDER[b.role] ?? 9)) || String(a.display_name || a.username).localeCompare(String(b.display_name || b.username), 'vi'));
   el.replaceChildren(h('div', { class: 'card' }, accSeg('users'), h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
-    h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Lấy ID. Bán hàng: khách, phiếu bán.'),
+    h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.'),
     h('div', { class: 'list' }, rows.map(u => h('div', { class: 'item', onclick: () => staffEdit(u) },
       h('div', { class: 'l' }, RANK[u.role] ? '👑' : '👤'), h('div', { class: 't' }, u.display_name || u.username),
       h('div', { class: 'r' }, h('span', { class: 'chip' }, ROLE[u.role] || u.role), u.active ? '' : [h('br'), h('span', { class: 'chip cancelled' }, 'Khóa')]),
@@ -1085,7 +1085,7 @@ async function handleScan(raw) {
     const r = await api('scan.lookup', { code });
     if (r.kind === 'board') {
       if (r.id) boardDetail(r.uid);
-      else if (can('keys.issue') && window.confirm(T('Mạch chưa có trong danh sách. Lấy ID cho UID này?'))) { go('keys'); setTimeout(() => { const i = document.querySelector('#view input.mono'); if (i) { i.value = uidFmt(r.uid); i.dispatchEvent(new Event('input')); } }, 400); }
+      else if (can('keys.issue') && window.confirm(T('Mạch chưa có trong danh sách. Tạo mã cho UID này?'))) { go('keys'); setTimeout(() => { const i = document.querySelector('#view input.mono'); if (i) { i.value = uidFmt(r.uid); i.dispatchEvent(new Event('input')); } }, 400); }
       else toast(`UID ${uidFmt(r.uid)}: ${T('chưa có trong danh sách')}`, true);
     }
     else if (r.kind === 'customer') custDetail(r.id);
