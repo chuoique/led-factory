@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.14';
+const APP_VERSION = 'LED Factory 0.15';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------

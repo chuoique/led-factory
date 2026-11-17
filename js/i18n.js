@@ -802,10 +802,6 @@ const RX = [
   [/^Không tải được: (.+)$/, (m, a) => 'Could not load: ' + tr(a)],
 ];
 
-
-
-
-
 // Cụm từ trong câu ghép nhiều phần (chỉ dùng khi câu còn chữ tiếng Việt sau 2 bước trên). Dài trước, ngắn sau.
 const FRAG = [
   ['Ảnh chụp toàn bộ: mỗi ', 'Full snapshot: every '], [' giờ · lần cuối ', ' h · last '], ['Nhật ký: ', 'Log: '], ['chưa đưa lên', 'not uploaded yet'],
