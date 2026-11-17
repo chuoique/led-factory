@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.3';
+const APP_VERSION = 'LED Factory 0.4';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -161,13 +161,13 @@ function screenConnecting() {
 // ---------- khung chính theo vai trò ----------
 // "Lấy ID" đặt ngay cạnh "Hệ thống" (yêu cầu): mục cuối trước Hệ thống
 const TABS = {
-  owner: ['production', 'boards', 'parts', 'purchases', 'sales', 'reports', 'cash', 'staff', 'keys', 'system'],
+  owner: ['production', 'parts', 'purchases', 'sales', 'reports', 'cash', 'staff', 'keys', 'system'],
   store: ['parts', 'purchases', 'production', 'system'],
-  tech:  ['production', 'boards', 'parts', 'keys', 'system'],
-  sales: ['sales', 'boards', 'system'],
+  tech:  ['production', 'parts', 'keys', 'system'],
+  sales: ['sales', 'keys', 'system'],
 };
 const TAB = {
-  production: ['🛠', 'Sản xuất'], boards: ['🔲', 'Mạch'], parts: ['🏬', 'Kho'], purchases: ['📥', 'Mua vào'], sales: ['🧾', 'Bán ra'],
+  production: ['🛠', 'Sản xuất'], parts: ['🏬', 'Kho'], purchases: ['📥', 'Mua vào'], sales: ['🧾', 'Bán ra'],
   reports: ['📊', 'Báo cáo'], cash: ['💵', 'Thu chi'], staff: ['👥', 'Tài khoản'], keys: ['🔑', 'Lấy ID'], system: ['⚙️', 'Hệ thống'],
 };
 function connBadge() {
@@ -212,7 +212,7 @@ function screenMain() {
     h('div', { id: 'banner' }),
     h('main', { class: 'wrap', id: 'view' }),
     h('nav', { class: 'tabs' }, tabs.map(t => h('button', { class: t === S.tab ? 'on' : '', onclick: () => go(t) },
-      h('span', { class: 'ic' }, TAB[t][0]), TAB[t][1]))));
+      h('span', { class: 'ic' }, TAB[t][0]), t === 'keys' && !can('keys.issue') ? 'Mạch' : TAB[t][1]))));
   loadCaches();
   go(S.tab);
 }
@@ -228,8 +228,8 @@ function go(tab) {
 async function loadCaches() {
   [S.products, S.staff] = await Promise.all([api('products.list', {}, true).catch(() => []), api('staff.list', {}, true).catch(() => [])]);
 }
-const TOPIC_VIEWS = { parts: ['parts'], purchases: ['purchases', 'reports', 'parts'], production: ['production', 'reports', 'parts'], boards: ['boards', 'keys', 'parts'],
-  sales: ['sales', 'reports', 'boards'], staff: ['staff'], cash: ['cash'] };
+const TOPIC_VIEWS = { parts: ['parts'], purchases: ['purchases', 'reports', 'parts'], production: ['production', 'reports', 'parts'], boards: ['keys', 'parts'],
+  sales: ['sales', 'reports', 'keys'], staff: ['staff'], cash: ['cash'] };
 let refreshTimer;
 Conn.on('event', topic => {
   if (topic === 'production' || topic === 'staff') loadCaches();
@@ -301,55 +301,85 @@ const two = (a, b) => h('div', { class: 'row' }, h('div', { class: 'grow' }, a),
 const numIn = (v, step) => h('input', { type: 'number', step: step || 'any', inputmode: 'decimal', value: v ?? '' });
 const ask = (q) => window.prompt(T(q));
 
-// ---------- LẤY ID (giống trang key server, chạy trong app) ----------
+// ---------- LẤY ID + MẠCH (trước là 2 tab) ----------
+// 1. "Lấy ID mạch LED": ô UID (gõ / UID.TXT / bấm dòng ở mục 2) -> ký -> dòng "id" cho config.json
+// 2. "Nhập UID (chưa lấy ID)": ghi UID trước, lấy ID sau – bấm 1 dòng = đưa UID lên ô phía trên
+// 3. "Danh sách mạch": mọi mạch (tìm, lọc, in tem, chi tiết / dòng đời)
 let keyCtx = { product_id: '', work_order_id: '' };
 async function vKeys(el) {
-  const [st, wos] = await Promise.all([api('keys.status'), api('wo.list', { open: 1 }).catch(() => [])]);
+  const canIssue = can('keys.issue'), canAdd = can('boards.save');
+  const [st, wos] = await Promise.all([canIssue ? api('keys.status') : { ready: false }, (canIssue || canAdd) ? api('wo.list', { open: 1 }).catch(() => []) : []]);
   await refreshProducts();
-  const prod = combo(S.products.filter(p => p.tracked !== 0), p => `${p.code ? p.code + ' · ' : ''}${p.name}`, keyCtx.product_id, 'Loại mạch (không bắt buộc)…', p => { keyCtx.product_id = p ? p.id : ''; });
-  const wo = combo(wos, o => `${o.number} · ${o.product_name || ''} (${o.boards}/${o.qty_plan})`, keyCtx.work_order_id, 'Lệnh sản xuất (không bắt buộc)…', o => { keyCtx.work_order_id = o ? o.id : ''; });
+  const cards = [];
   const uid = h('input', { placeholder: '36FFDB05-30473036-33562443', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false', class: 'mono' });
   const msg = h('p', { class: 'small muted' });
   const btn = h('button', { class: 'btn', disabled: true }, 'Lấy ID');
   const out = h('div', { style: 'display:grid;gap:10px' });
   const ck = () => { const ok = !!uidNorm(uid.value); btn.disabled = !ok || !st.ready; btn.style.opacity = btn.disabled ? 0.45 : 1; };
-  uid.addEventListener('input', ck);
-  uid.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) btn.click(); });
-  const readFile = f => { if (!f) return; const r = new FileReader(); r.onload = () => {
-    const u = uidFind(r.result);
-    if (u) { uid.value = uidFmt(u); msg.className = 'small'; msg.style.color = 'var(--ok)'; msg.textContent = T('Đã lấy UID từ ') + f.name + T(' – bấm Lấy ID'); }
-    else { msg.className = 'small'; msg.style.color = 'var(--bad)'; msg.textContent = T('Không tìm thấy UID (24 ký tự hex) trong ') + f.name; }
-    ck(); }; r.readAsText(f); };
-  const fileIn = h('input', { type: 'file', accept: '.txt,.TXT,text/plain', style: 'display:none', onchange: e => { readFile(e.target.files[0]); e.target.value = ''; } });
-  const dz = h('div', { class: 'row dz' }, h('div', { class: 'grow' }, uid), h('label', { class: 'btn ghost small' }, 'Chọn UID.TXT', fileIn));
-  ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
-  dz.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
-  btn.onclick = () => busy(btn, api('keys.issue', { uid: uid.value, ...keyCtx }).then(r => {
-    const b = r.board || {};
-    const line = h('div', { class: 'idline' }, r.line);
-    const copy = h('button', { class: 'btn' }, 'Copy');
-    copy.onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(r.line) : Promise.reject()).then(() => { copy.textContent = T('Đã copy'); })
-      .catch(() => { const s = window.getSelection(), rg = document.createRange(); rg.selectNodeContents(line); s.removeAllRanges(); s.addRange(rg); try { document.execCommand('copy'); copy.textContent = T('Đã copy'); } catch (e) {} }); };
-    out.replaceChildren(h('div', { class: 'card' },
-      h('p', { style: 'color:var(--' + (r.again ? 'muted' : 'ok') + ')' }, r.again ? `Mạch ĐÃ CÓ ID (cấp ${b.key_at ? dmy(b.key_at) : ''}) – lấy lại, không tính mạch mới` : 'Mạch MỚI – đã thêm vào danh sách'),
-      h('div', { class: 'mono' }, 'UID ' + uidFmt(r.uid)),
-      h('p', { class: 'small muted' }, 'Dán dòng dưới vào config.json trên ổ CONFIG của mạch (thay dòng "id" cũ):'), line,
-      h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'))));
-    uid.value = ''; msg.textContent = ''; ck(); loadRecent();
-  }).catch(() => {}));
-  const recent = h('div', { class: 'list' });
-  const loadRecent = () => api('boards.list', { limit: 15 }, true).then(rows => recent.replaceChildren(...(rows.length ? rows.filter(b => b.key_at).map(b => h('div', { class: 'item', onclick: () => boardDetail(b.uid) },
-    h('div', { class: 'l' }, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)), h('div', { class: 'r' }, bchip(b.status)),
-    h('div', { class: 's' }, [dmy(b.key_at) + ' ' + hm(b.key_at), b.product_name, b.wo_number].filter(Boolean).join(' · ')))) : [h('div', { class: 'empty' }, 'Chưa cấp ID nào')]))).catch(() => {});
-  el.replaceChildren(
-    h('div', { class: 'card' }, h('h2', {}, 'Lấy ID mạch LED'),
+  let reloadPending = () => {}, reloadList = () => {};
+  // bấm 1 dòng "chưa lấy ID" -> UID lên ô Lấy ID
+  const setUid = b => {
+    uid.value = uidFmt(b.uid); msg.className = 'small'; msg.style.color = 'var(--ok)';
+    msg.textContent = T('Đã đưa UID lên') + (b.product_code || b.wo_number ? ` (${[b.product_code, b.wo_number].filter(Boolean).join(' · ')})` : '') + T(' – bấm Lấy ID');
+    ck(); uid.scrollIntoView({ behavior: 'smooth', block: 'center' }); if (!('ontouchstart' in window)) uid.focus();
+  };
+  if (canIssue) {
+    const prod = combo(S.products.filter(p => p.tracked !== 0), p => `${p.code ? p.code + ' · ' : ''}${p.name}`, keyCtx.product_id, 'Loại mạch (không bắt buộc)…', p => { keyCtx.product_id = p ? p.id : ''; });
+    const wo = combo(wos, o => `${o.number} · ${o.product_name || ''} (${o.with_id ?? o.boards}/${o.qty_plan})`, keyCtx.work_order_id, 'Lệnh sản xuất (không bắt buộc)…', o => { keyCtx.work_order_id = o ? o.id : ''; });
+    uid.addEventListener('input', ck);
+    uid.addEventListener('keydown', e => { if (e.key === 'Enter' && !btn.disabled) btn.click(); });
+    const readFile = f => { if (!f) return; const r = new FileReader(); r.onload = () => {
+      const u = uidFind(r.result);
+      if (u) { uid.value = uidFmt(u); msg.className = 'small'; msg.style.color = 'var(--ok)'; msg.textContent = T('Đã lấy UID từ ') + f.name + T(' – bấm Lấy ID'); }
+      else { msg.className = 'small'; msg.style.color = 'var(--bad)'; msg.textContent = T('Không tìm thấy UID (24 ký tự hex) trong ') + f.name; }
+      ck(); }; r.readAsText(f); };
+    const fileIn = h('input', { type: 'file', accept: '.txt,.TXT,text/plain', style: 'display:none', onchange: e => { readFile(e.target.files[0]); e.target.value = ''; } });
+    const dz = h('div', { class: 'row dz' }, h('div', { class: 'grow' }, uid), h('label', { class: 'btn ghost small' }, 'Chọn UID.TXT', fileIn));
+    ['dragenter', 'dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('over'); }));
+    dz.addEventListener('drop', e => readFile(e.dataTransfer.files[0]));
+    btn.onclick = () => busy(btn, api('keys.issue', { uid: uid.value, ...keyCtx }).then(r => {
+      const b = r.board || {};
+      const line = h('div', { class: 'idline' }, r.line);
+      const copy = h('button', { class: 'btn' }, 'Copy');
+      copy.onclick = () => { (navigator.clipboard ? navigator.clipboard.writeText(r.line) : Promise.reject()).then(() => { copy.textContent = T('Đã copy'); })
+        .catch(() => { const s = window.getSelection(), rg = document.createRange(); rg.selectNodeContents(line); s.removeAllRanges(); s.addRange(rg); try { document.execCommand('copy'); copy.textContent = T('Đã copy'); } catch (e) {} }); };
+      out.replaceChildren(h('div', { class: 'card' },
+        h('div', { class: 'row' }, boardIcon(b), h('p', { style: 'color:var(--' + (r.again ? 'muted' : 'ok') + ')' }, r.again ? `Mạch ĐÃ CÓ ID (cấp ${b.key_at ? dmy(b.key_at) : ''}) – lấy lại, không tính mạch mới` : 'Mạch MỚI – đã vào Thành phẩm')),
+        h('div', { class: 'mono' }, 'UID ' + uidFmt(r.uid)),
+        h('p', { class: 'small muted' }, 'Dán dòng dưới vào config.json trên ổ CONFIG của mạch (thay dòng "id" cũ):'), line,
+        h('div', { class: 'row' }, copy, h('button', { class: 'btn ghost', onclick: () => printLabels([b]) }, '🏷 In tem QR'), h('button', { class: 'btn ghost', onclick: () => boardDetail(r.uid) }, 'Chi tiết mạch'))));
+      uid.value = ''; msg.textContent = ''; ck(); reloadPending(); reloadList();
+    }).catch(() => {}));
+    cards.push(h('div', { class: 'card' }, h('h2', {}, 'Lấy ID mạch LED'),
       !st.ready && h('div', { class: 'banner' }, 'Máy chủ "' + st.server + '" không cấp được ID: ' + st.why + '. Cài khoá riêng lên máy chủ này (giống key server: %LOCALAPPDATA%\\KeyServer\\ed25519_private.key) hoặc dùng máy chủ khác có khoá.'),
       two(field('Loại mạch', prod), field('Lệnh sản xuất', wo)),
-      field('UID (24 ký tự hex) – gõ, hoặc chọn / kéo thả file UID.TXT từ ổ CONFIG của mạch', dz), msg, btn),
-    out,
-    h('div', { class: 'card' }, h('h3', {}, 'Vừa cấp gần đây'), recent));
-  ck(); loadRecent();
+      field('UID (24 ký tự hex) – gõ, chọn / kéo thả file UID.TXT, hoặc bấm 1 dòng ở mục "Nhập UID" bên dưới', dz), msg, btn), out);
+  }
+  if (canAdd) {   // mục 2: UID ghi trước, chưa lấy ID
+    const inp = h('input', { placeholder: 'Quét / gõ UID rồi Enter (dán được nhiều UID một lúc)', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false' });
+    const box = h('div', { class: 'list' });
+    const add = () => {
+      const list = [...new Set((inp.value.match(/[0-9A-Fa-f]{8}[-\s]?[0-9A-Fa-f]{8}[-\s]?[0-9A-Fa-f]{8}/g) || []).map(uidFind))];
+      if (!list.length) return toast('UID phải có 24 ký tự hex', true);
+      Promise.all(list.map(u => api('boards.save', { uid: u, product_id: keyCtx.product_id || null, work_order_id: keyCtx.work_order_id || null }, true).then(() => 1, e => { toast(e.message, true); return 0; })))
+        .then(r => { const n = r.reduce((s, x) => s + x, 0); if (n) toast(`${T('Đã ghi')} ${n} UID`); inp.value = ''; reloadPending(); reloadList(); });
+    };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    reloadPending = () => api('boards.list', { no_key: 1, limit: 500 }, true).then(rows => box.replaceChildren(...(rows.length ? rows.map(b => h('div', { class: 'item', onclick: () => canIssue ? setUid(b) : boardDetail(b.uid) },
+      h('div', { class: 'l' }, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
+      h('div', { class: 'r' }, h('button', { class: 'btn ghost small', onclick: e => { e.stopPropagation(); boardDetail(b.uid); } }, '…')),
+      h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.created_at && dmy(b.created_at)].filter(Boolean).join(' · ')))) :
+      [h('div', { class: 'empty' }, 'Không có UID nào đang chờ lấy ID')]))).catch(() => {});
+    cards.push(h('div', { class: 'card' }, h('h3', {}, 'Nhập UID (chưa lấy ID)'),
+      h('p', { class: 'small muted' }, 'Ghi UID mạch trước, lấy ID sau. Loại mạch / lệnh sản xuất lấy theo ô chọn ở trên. Bấm 1 dòng để đưa UID lên ô Lấy ID.'),
+      h('div', { class: 'row' }, h('div', { class: 'grow' }, inp), h('button', { class: 'btn ghost', onclick: add }, 'Ghi UID')), box));
+  }
+  const list = boardsCard();
+  reloadList = list.load;
+  cards.push(list.card);
+  el.replaceChildren(...cards);
+  ck(); reloadPending(); await list.load();
 }
 
 // ---------- tem QR theo UID ----------
@@ -382,9 +412,9 @@ function printLabels(boards) {
     } }, '🖨 In'));
 }
 
-// ---------- MẠCH THEO UID ----------
+// ---------- DANH SÁCH MẠCH (trong trang Lấy ID) ----------
 let boardQ = '', boardSt = '';
-async function vBoards(el) {
+function boardsCard() {
   const q = h('input', { type: 'search', placeholder: 'UID, khách, lệnh sản xuất, số phiếu bán…', value: boardQ });
   const box = h('div', { class: 'list' });
   let rows = [], picked = new Set();
@@ -397,15 +427,13 @@ async function vBoards(el) {
       return h('div', { class: 'item', onclick: () => boardDetail(b.uid) }, h('div', { class: 'l', style: 'display:flex;gap:6px;align-items:center' }, cb, boardIcon(b)), h('div', { class: 't mono' }, uidFmt(b.uid)),
         h('div', { class: 'r' }, bchip(b.status), b.key_id ? '' : [h('br'), h('span', { class: 'chip plan' }, 'Chưa có ID')]),
         h('div', { class: 's' }, [b.product_code || b.product_name, b.wo_number, b.customer_name, b.key_at && dmy(b.key_at)].filter(Boolean).join(' · ')));
-    }) : [h('div', { class: 'empty' }, 'Chưa có mạch nào. Mạch được thêm khi Lấy ID, hoặc bấm "+ Thêm mạch".')]));
-  });
+    }) : [h('div', { class: 'empty' }, 'Chưa có mạch nào')]));
+  }).catch(() => {});
   let t;
   q.addEventListener('input', () => { boardQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const stSel = h('select', { onchange: e => { boardSt = e.target.value; load(); } }, h('option', { value: '' }, 'Mọi trạng thái'),
     Object.entries(BSTATUS).map(([v, l]) => h('option', { value: v, selected: v === boardSt }, l)));
-  el.replaceChildren(h('div', { class: 'card' }, q, h('div', { class: 'row' }, stSel, printBtn,
-    can('boards.save') && h('button', { class: 'btn ghost', onclick: () => boardEdit({}) }, '+ Thêm mạch')), box));
-  await load();
+  return { load, card: h('div', { class: 'card' }, h('h3', {}, 'Danh sách mạch'), q, h('div', { class: 'row' }, stSel, printBtn), box, boardLegend()) };
 }
 async function boardDetail(uid) {
   const b = await api('boards.get', { uid });
@@ -445,7 +473,7 @@ async function boardEdit(b) {
   btn.onclick = () => {
     const a = { product_id: pid || null, work_order_id: wid || null, status: st.value, firmware: fw.value.trim() || null, note: note.value.trim() || null };
     if (isNew) a.uid = uid.value; else a.id = b.id;
-    busy(btn, api('boards.save', a).then(r => { toast('Đã lưu'); close(); go('boards'); if (!isNew) boardDetail(r.uid); }).catch(() => {}));
+    busy(btn, api('boards.save', a).then(r => { toast('Đã lưu'); close(); go('keys'); if (!isNew) boardDetail(r.uid); }).catch(() => {}));
   };
   close = sheet(isNew ? 'Thêm mạch (chưa lấy ID)' : 'Sửa mạch', grid(field('UID', uid), two(field('Loại mạch', prod), field('Lệnh SX', wo)),
     two(field('Trạng thái', st), field('Firmware', fw)), field('Ghi chú (lỗi, bảo hành…)', note)), btn);
@@ -602,7 +630,7 @@ async function vParts(el) {
         (ov.done_unknown || {}).n ? h('div', { class: 'item', onclick: () => finishedSheet({ name: T('Chưa gán loại mạch') }) }, h('div', { class: 'l' }, boardIcon({ key_id: 1 })),
           h('div', { class: 't' }, 'Chưa gán loại mạch'), h('div', { class: 'r' }, h('b', {}, ov.done_unknown.n)), h('div', { class: 's' }, 'Lấy ID không chọn loại mạch – bấm để sửa từng mạch')) : null]
         : h('div', { class: 'empty' }, 'Chưa có thành phẩm trong kho')),
-      h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: () => go('boards') }, 'Xem mọi mạch (cả đã bán)')), boardLegend()));
+      h('div', { class: 'row' }, h('button', { class: 'btn ghost', onclick: () => go('keys') }, 'Xem mọi mạch (cả đã bán)')), boardLegend()));
     return;
   }
   const cat = khoTab;
@@ -1317,7 +1345,7 @@ function unpair() {
   Conn.forget(); S.me = null; S.welcome = null; screenPair('Đã gỡ ghép máy.');
 }
 
-const VIEWS = { production: vProduction, boards: vBoards, parts: vParts, purchases: vPurchases, sales: vSales, reports: vReports,
+const VIEWS = { production: vProduction, boards: vKeys, parts: vParts, purchases: vPurchases, sales: vSales, reports: vReports,
   cash: vCash, staff: vStaff, devices: el => { S.accTab = 'devices'; return vStaff(el); }, keys: vKeys, system: vSystem };
 
 // ---------- khởi động ----------
