@@ -163,6 +163,23 @@ pre.log{margin:0;font:11px/1.4 var(--mono);white-space:pre-wrap;word-break:break
 .label img{display:block;image-rendering:pixelated;background:#fff}
 .label .lt{font:700 2.6mm/1.15 var(--sans);overflow:hidden} .label .lu{font:600 2.3mm/1.2 var(--mono);word-break:break-all}
 .label .ls{font:2.1mm/1.2 var(--sans);color:#333}
+/* biểu tượng mạch (kiểu biểu tượng khách của spa):
+   mờ = chưa có ID (bán thành phẩm) · sáng = đã có ID, trong kho · sáng + vòng phát sáng xanh = đã bán, còn bảo hành
+   vòng xám = đã bán, hết bảo hành · viền đỏ = khách trả / bảo hành / hủy */
+.bic{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;color:var(--muted);opacity:.35;flex:none;vertical-align:middle}
+.bic svg{width:22px;height:22px}
+.bic.id{color:var(--brand);opacity:1}
+.bic.sold{color:var(--brand);opacity:1;background:var(--brand-soft);box-shadow:0 0 0 2px var(--ok),0 0 12px var(--ok)}
+.bic.sold.exp{box-shadow:0 0 0 2px var(--muted);background:none}
+.bic.bad{color:var(--bad);opacity:1;box-shadow:0 0 0 2px var(--bad)}
+.bic.big{width:56px;height:56px}.bic.big svg{width:36px;height:36px}
+.bleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);align-items:center}
+.bleg span{display:inline-flex;align-items:center;gap:4px}.bleg .bic{width:24px;height:24px}.bleg .bic svg{width:16px;height:16px}
+.tl{display:grid;gap:0;margin:0;padding:0;list-style:none}
+.tl li{display:grid;grid-template-columns:18px 1fr;gap:8px;padding:0 0 10px;position:relative}
+.tl li::before{content:'';width:12px;height:12px;border-radius:50%;background:var(--line);margin-top:4px}
+.tl li.on::before{background:var(--brand)}
+.tl li:not(:last-child)::after{content:'';position:absolute;left:5px;top:18px;bottom:0;width:2px;background:var(--line)}
 .idline{font:12px/1.4 var(--mono);word-break:break-all;background:var(--soft);border-radius:9px;padding:10px;user-select:all;-webkit-user-select:all}
 .dz{border:2px dashed transparent;border-radius:10px} .dz.over{border-color:var(--brand)}
 /* (giu tu spa) */
