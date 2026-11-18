@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.21';
+const APP_VERSION = 'LED Factory 0.22';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1202,7 +1202,7 @@ async function vStaff(el) {
   el.replaceChildren(h('div', { class: 'card' }, accSeg('users'), h('button', { class: 'btn', onclick: () => staffEdit({}) }, '+ Thêm tài khoản'),
     h('p', { class: 'small muted' }, 'Mỗi người một tài khoản riêng. Trợ lý: như Quản lý nhưng không quản lý tài khoản, thiết bị, cài đặt hệ thống, trợ giúp từ xa. Thủ kho: linh kiện, mua vào. Kỹ thuật: sản xuất, Tạo mã. Bán hàng: khách, phiếu bán.'),
     h('div', { class: 'list' }, rows.map(u => h('div', { class: 'item', onclick: () => staffEdit(u) },
-      h('div', { class: 'l' }, RANK[u.role] ? '👑' : '👤'), h('div', { class: 't' }, u.display_name || u.username),
+      h('div', { class: 'l' }, RANK[u.role] ? h('img', { src: 'icon-192.png', alt: '', style: 'width:28px;height:28px;border-radius:7px;display:block' }) : '👤'), h('div', { class: 't' }, u.display_name || u.username),
       h('div', { class: 'r' }, h('span', { class: 'chip' }, ROLE[u.role] || u.role), u.active ? '' : [h('br'), h('span', { class: 'chip cancelled' }, 'Khóa')]),
       h('div', { class: 's' }, [u.staff_code, u.title, u.username, u.phone].filter(Boolean).join(' · ')))))));
 }
