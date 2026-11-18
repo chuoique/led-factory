@@ -1,7 +1,7 @@
 // Service worker: giữ bản sao trang + thư viện trong máy.
 // Mở app luôn dùng ngay bản trong máy (nhanh, chạy được cả khi mất Internet / GitHub sập),
 // đồng thời tải bản mới ở nền cho lần mở sau.
-const CACHE = 'lf-v20';
+const CACHE = 'lf-v21';
 const FILES = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const FILES = [
   './icon-512.png',
   './js/i18n.js',
   './js/conn.js',
+  './js/bomimport.js',
   './js/app.js',
   './lib/mqtt.min.js',
   './lib/forge.min.js',

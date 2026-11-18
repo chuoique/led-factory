@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.20';
+const APP_VERSION = 'LED Factory 0.21';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -291,8 +291,8 @@ function boardIcon(b, big) {
 const boardLegend = () => h('div', { class: 'bleg' }, Object.entries(BSTATE_T).map(([k, l]) => { const s = h('span', { class: 'bic ' + k }); s.innerHTML = CHIP_SVG; return h('span', {}, s, l); }));
 const can = op => {   // ẩn nút theo vai trò (máy chủ vẫn kiểm tra lại)
   const r = myRole();
-  const P = { store: ['parts.save', 'parts.move', 'suppliers.save', 'purchases.create', 'purchases.pay', 'wo.issue'],
-    tech: ['bom.save', 'wo.save', 'wo.issue', 'wo.finish', 'boards.save', 'keys.issue'],
+  const P = { store: ['parts.save', 'parts.move', 'suppliers.save', 'purchases.create', 'purchases.pay', 'wo.issue', 'parts.code_add', 'parts.import'],
+    tech: ['bom.save', 'wo.save', 'wo.issue', 'wo.finish', 'boards.save', 'keys.issue', 'parts.import'],
     sales: ['customers.save', 'sales.create', 'sales.pay'] };
   return r === 'owner' || (P[r] || []).includes(op);
 };
@@ -483,21 +483,39 @@ function labelEl(b, cfg) {
 function printLabels(boards) {
   boards = boards.filter(b => b && b.uid);
   if (!boards.length) return toast('Chưa chọn mạch nào', true);
+  printTags(boards, labelEl, 'Mã QR chứa UID (dạng XXXXXXXX-XXXXXXXX-XXXXXXXX): quét bằng app (📷) hoặc máy quét để mở thẳng mạch đó.');
+}
+// Bảng in tem chung (mạch / linh kiện): khổ tem + kiểu in nhớ trên máy này
+function printTags(items, render, note) {
   const w = numIn(labelCfg.w, 1), hh = numIn(labelCfg.h, 1);
   const mode = h('select', {}, h('option', { value: 'roll', selected: labelCfg.mode === 'roll' }, 'Máy in tem (mỗi tem 1 trang)'), h('option', { value: 'a4', selected: labelCfg.mode === 'a4' }, 'Giấy A4 (xếp nhiều tem)'));
   const prev = h('div', { class: 'labels' });
   const draw = () => { labelCfg = { w: +w.value || 40, h: +hh.value || 25, mode: mode.value }; try { localStorage.setItem('lf-label', JSON.stringify(labelCfg)); } catch (e) {}
-    prev.replaceChildren(...boards.map(b => labelEl(b, labelCfg))); };
+    prev.replaceChildren(...items.slice(0, 60).map(b => render(b, labelCfg))); };
   w.oninput = hh.oninput = mode.onchange = draw; draw();
-  sheet(`${T('In tem')} (${boards.length})`, grid(two(field('Rộng (mm)', w), field('Cao (mm)', hh)), field('Kiểu in', mode), prev,
-    h('p', { class: 'small muted' }, 'Mã QR chứa UID (dạng XXXXXXXX-XXXXXXXX-XXXXXXXX): quét bằng app (📷) hoặc máy quét để mở thẳng mạch đó.')),
+  sheet(`${T('In tem')} (${items.length})`, grid(two(field('Rộng (mm)', w), field('Cao (mm)', hh)), field('Kiểu in', mode), prev,
+    h('p', { class: 'small muted' }, note)),
     h('button', { class: 'btn', onclick: () => {
       const st = document.createElement('style');
       st.textContent = labelCfg.mode === 'roll' ? `@page{size:${labelCfg.w}mm ${labelCfg.h}mm;margin:0}.print-area .label{page-break-after:always}` : '@page{size:A4;margin:8mm}';
-      const area = h('div', { class: 'print-area' }, h('div', { class: 'labels' }, boards.map(b => labelEl(b, labelCfg))));
+      const area = h('div', { class: 'print-area' }, h('div', { class: 'labels' }, items.map(b => render(b, labelCfg))));
       document.head.append(st); document.body.append(area);
       setTimeout(() => { window.print(); setTimeout(() => { area.remove(); st.remove(); }, 500); }, 200);
     } }, '🖨 In'));
+}
+// Tem linh kiện / vật tư: QR = mã kho (LK-…), dán lên ngăn, hộp, túi, cuộn
+function partTagEl(p, cfg) {
+  const q = Math.min(cfg.h - 2.4, cfg.w * 0.45);
+  const qr = qrcode(0, 'M'); qr.addData(p.code || ''); qr.make();
+  return h('div', { class: 'label', style: `width:${cfg.w}mm;height:${cfg.h}mm` },
+    h('img', { src: qr.createDataURL(6, 0), style: `width:${q}mm;height:${q}mm`, alt: p.code }),
+    h('div', {}, h('div', { class: 'lu' }, p.code || ''), h('div', { class: 'lt' }, `${p.name || ''}${p.spec && !String(p.name).includes(p.spec) ? ' ' + p.spec : ''}`),
+      h('div', { class: 'ls' }, [p.package, p.location && '📍' + p.location].filter(Boolean).join(' · '))));
+}
+function printPartTags(parts) {
+  parts = parts.filter(p => p && p.code);
+  if (!parts.length) return toast('Chưa chọn linh kiện nào', true);
+  printTags(parts, partTagEl, 'Mã QR chứa mã kho (LK-…): quét bằng app (📷) hoặc máy quét để mở linh kiện, nhập / xuất / kiểm kê nhanh. Dán lên ngăn tủ, hộp, túi hoặc cuộn.');
 }
 
 // ---------- MẠCH (mục cũ, giữ nguyên nội dung; nằm trong trang Tạo mã, tiêu đề "Nhập UID (chưa tạo mã)") ----------
@@ -641,7 +659,8 @@ async function bomSheet(product_id) {
     h('div', { class: 'row between' }, h('span', { class: 'muted' }, 'Giá thành linh kiện / mạch'), costEl)),
     [edit && h('button', { class: 'btn', onclick: e => busy(e.target, api('bom.save', { product_id, items: lines.filter(l => l.sel.value).map(l => ({ part_id: l.sel.value, qty: +l.qty.value || 1, ref: l.ref.value.trim() })) })
       .then(() => { toast('Đã lưu BOM'); close(); go('production'); }).catch(() => {})) }, 'Lưu BOM'),
-     can('products.save') && h('button', { class: 'btn ghost', onclick: () => { close(); productEdit(p); } }, 'Sửa loại mạch')]);
+     can('products.save') && h('button', { class: 'btn ghost', onclick: () => { close(); productEdit(p); } }, 'Sửa loại mạch'),
+     edit && h('button', { class: 'btn ghost', onclick: () => { close(); importSheet(product_id, 'part'); } }, '📄 Nhập BOM từ file')]);
 }
 async function woEdit(o) {
   await refreshProducts();
@@ -693,7 +712,8 @@ async function woDetail(id) {
 //   Linh kiện / Vật tư: vào bằng phiếu nhập, ra khi xuất cho lệnh sản xuất (theo BOM) hoặc xuất tay
 //   Bán thành phẩm: mạch đã xuất linh kiện cho lệnh nhưng CHƯA có ID (chỉ là số đếm theo lệnh – UID quét lúc Tạo mã)
 //   Thành phẩm: mạch đã có ID còn trong kho (theo loại mạch) + hàng không theo dõi UID
-let partQ = '', partLow = 0, khoTab = 'part';
+let partQ = '', partLow = 0, khoTab = 'part', partBom = '';
+const partSel = new Set();      // linh kiện đã tích (in tem)
 const KHO = { part: 'Linh kiện', supply: 'Vật tư', wip: 'Bán thành phẩm', done: 'Thành phẩm' };
 async function vParts(el) {
   const ov = await api('stock.overview');
@@ -728,20 +748,36 @@ async function vParts(el) {
     return;
   }
   const cat = khoTab;
-  const q = h('input', { type: 'search', placeholder: 'Mã, tên, giá trị, mã nhà sản xuất, vị trí…', value: partQ });
+  await refreshProducts();
+  const q = h('input', { type: 'search', placeholder: 'Mã, tên, giá trị, mã NSX / LCSC, vị trí…', value: partQ });
   const box = h('div', { class: 'list' });
-  const load = () => api('parts.list', { q: partQ, low: partLow, category: cat, all: myRole() === 'owner' ? 1 : 0 }).then(rows => box.replaceChildren(...(rows.length ? rows.map(p => {
-    const low = p.min_stock != null && p.stock <= p.min_stock;
-    return h('div', { class: 'item', onclick: () => partSheet(p.id) }, h('div', { class: 'l' }, p.code || '▪'), h('div', { class: 't' }, p.name + (p.spec ? ' ' + p.spec : '')),
-      h('div', { class: 'r' }, h('b', { style: low || p.stock <= 0 ? 'color:var(--bad)' : '' }, `${num(p.stock)} ${T(p.unit || '')}`), p.active === 0 ? [h('br'), h('span', { class: 'chip' }, 'Ngừng')] : ''),
-      h('div', { class: 's' }, [p.package, p.location && '📍' + p.location, p.cost ? money(p.cost) : '', p.supplier_name].filter(Boolean).join(' · ')));
-  }) : [h('div', { class: 'empty' }, partLow ? 'Không có mục nào sắp hết' : cat === 'supply' ? 'Chưa có vật tư' : 'Chưa có linh kiện')])));
+  let rows = [];
+  // Theo mạch / lẻ: '' = tất cả, '_loose' = không thuộc BOM loại mạch nào, id = trong BOM loại mạch đó
+  const bomSel = h('select', { style: 'width:auto;max-width:100%', onchange: () => { partBom = bomSel.value; partSel.clear(); load(); } },
+    h('option', { value: '' }, 'Mọi linh kiện'), h('option', { value: '_loose', selected: partBom === '_loose' }, 'Lẻ (không thuộc mạch nào)'),
+    S.products.map(p => h('option', { value: p.id, selected: partBom === p.id }, `${T('Mạch')} ${p.code ? p.code + ' · ' : ''}${p.name}`)));
+  const tagBtn = h('button', { class: 'btn ghost small', onclick: () => printPartTags(rows.filter(p => partSel.has(p.id))) });
+  const allBtn = h('button', { class: 'btn ghost small', onclick: () => { const all = rows.length && rows.every(p => partSel.has(p.id)); rows.forEach(p => all ? partSel.delete(p.id) : partSel.add(p.id)); draw(); } });
+  const draw = () => {
+    tagBtn.textContent = `${T('🏷 In tem')} (${partSel.size})`; tagBtn.disabled = !partSel.size;
+    allBtn.textContent = T(rows.length && rows.every(p => partSel.has(p.id)) ? '☐ Bỏ chọn' : '☑ Chọn tất cả');
+    box.replaceChildren(...(rows.length ? rows.map(p => {
+      const low = p.min_stock != null && p.stock <= p.min_stock;
+      const ck = h('input', { type: 'checkbox', checked: partSel.has(p.id), style: 'width:auto;margin:0 4px 0 0', onclick: e => { e.stopPropagation(); ck.checked ? partSel.add(p.id) : partSel.delete(p.id); tagBtn.textContent = `${T('🏷 In tem')} (${partSel.size})`; tagBtn.disabled = !partSel.size; } });
+      return h('div', { class: 'item', onclick: () => partSheet(p.id) }, h('div', { class: 'l', style: 'display:flex;align-items:center' }, ck, p.code || '▪'), h('div', { class: 't' }, p.name + (p.spec && !p.name.includes(p.spec) ? ' ' + p.spec : '')),
+        h('div', { class: 'r' }, h('b', { style: low || p.stock <= 0 ? 'color:var(--bad)' : '' }, `${num(p.stock)} ${T(p.unit || '')}`), p.active === 0 ? [h('br'), h('span', { class: 'chip' }, 'Ngừng')] : ''),
+        h('div', { class: 's' }, [p.package, p.location && '📍' + p.location, p.cost ? money(p.cost) : '', p.supplier_name, p.boms ? `${p.boms} ${T('mạch')}` : T('lẻ'), p.codes].filter(Boolean).join(' · ')));
+    }) : [h('div', { class: 'empty' }, partLow ? 'Không có mục nào sắp hết' : cat === 'supply' ? 'Chưa có vật tư' : 'Chưa có linh kiện')]));
+  };
+  const load = () => api('parts.list', { q: partQ, low: partLow, category: cat, all: myRole() === 'owner' ? 1 : 0,
+    product_id: partBom && partBom !== '_loose' ? partBom : '', loose: partBom === '_loose' ? 1 : 0, limit: 2000 }).then(r => { rows = r; draw(); });
   let t;
   q.addEventListener('input', () => { partQ = q.value.trim(); clearTimeout(t); t = setTimeout(load, 250); });
   const g = pc[cat] || {};
   el.replaceChildren(h('div', { class: 'card' }, seg, q,
     segBar(partLow ? 'low' : 'all', [['all', 'Tất cả'], ['low', `⚠ Sắp hết${g.low ? ' (' + g.low + ')' : ''}`]], k => { partLow = k === 'low' ? 1 : 0; go('parts'); },
       can('parts.save') && [cat === 'supply' ? '+ Vật tư' : '+ Linh kiện', () => partEdit({ category: cat })]),
+    h('div', { class: 'row' }, bomSel, allBtn, tagBtn, (can('parts.save') || can('bom.save')) && h('button', { class: 'btn ghost small', onclick: () => importSheet(partBom && partBom !== '_loose' ? partBom : '', cat) }, '📄 Nhập từ file')),
     h('div', { class: 'row between' }, h('span', { class: 'small muted' }, `${T('Giá trị tồn')} ${money(g.value || 0)}`),
       h('button', { class: 'btn ghost small', onclick: partHistory }, 'Lịch sử nhập xuất')), box));
   await load();
@@ -769,12 +805,120 @@ async function partSheet(id) {
       h('div', { class: 'stat' }, 'Giá nhập gần nhất', h('b', {}, money(p.cost))), p.min_stock != null && h('div', { class: 'stat' }, 'Báo khi dưới', h('b', {}, num(p.min_stock)))),
     kv([['Giá trị / thông số', p.spec], ['Kiểu chân', p.package], ['Hãng / mã NSX', [p.maker, p.mpn].filter(Boolean).join(' · ')], ['Vị trí', p.location], ['NCC chính', p.supplier_name], ['Ghi chú', p.note]]),
     can('parts.move') && [two(field('Loại phiếu', kind), field('Số lượng', qty)), field('Ghi chú', note), h('p', { class: 'small muted' }, 'Kiểm kê: nhập số âm hoặc dương để chỉnh lệch tồn. Nhập mua dùng mục Mua vào.')],
+    codesBlock(p, () => { close(); partSheet(id); }),
     (p.used_in || []).length && [h('h3', {}, 'Dùng trong BOM'), h('div', { class: 'list' }, p.used_in.map(u => h('div', { class: 'item' }, h('div', { class: 'l' }, `${num(u.qty)}×`), h('div', { class: 't' }, `${u.code || ''} ${u.name}`), h('div', { class: 'r' }), h('div', { class: 's' }, u.ref || ''))))],
     (p.prices || []).length && [h('h3', {}, 'Giá các lần nhập'), h('div', { class: 'list' }, p.prices.map(x => h('div', { class: 'item' }, h('div', { class: 'l' }, dmy(x.at).slice(0, 5)), h('div', { class: 't' }, x.supplier_name || x.number), h('div', { class: 'r' }, money(x.price)), h('div', { class: 's' }, `${x.number} · ${T('SL')} ${num(x.qty)}`))))],
     h('h3', {}, 'Nhập xuất gần đây'),
     h('div', { class: 'list' }, (p.moves || []).length ? p.moves.slice(0, 30).map(m => h('div', { class: 'item' }, h('div', { class: 'l' }, dmy(m.at).slice(0, 5)), h('div', { class: 't' }, PMOVE[m.kind] || m.kind),
       h('div', { class: 'r' }, h('b', { style: `color:var(--${m.qty < 0 ? 'bad' : 'ok'})` }, `${m.qty > 0 ? '+' : ''}${num(m.qty)}`)), h('div', { class: 's' }, [m.doc, T(m.note || ''), m.by_name].filter(Boolean).join(' · ')))) : h('div', { class: 'empty' }, 'Chưa có'))),
-    [can('parts.move') && btn, can('parts.save') && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit(p); } }, 'Sửa linh kiện')]);
+    [can('parts.move') && btn, can('parts.save') && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit(p); } }, 'Sửa linh kiện'),
+     h('button', { class: 'btn ghost', onclick: () => printPartTags([p]) }, '🏷 In tem')]);
+}
+// ---------- NHẬP TỪ FILE: BOM KiCad / Altium / EasyEDA (CSV, TSV), Excel .xlsx tự làm ----------
+// Đọc file (js/bomimport.js) -> xem trước từng dòng: ghép với linh kiện đã có (mã LCSC / MPN / giá trị + kiểu vỏ) hoặc TẠO MỚI (tồn 0)
+// -> parts.import: tạo linh kiện, gắn mã phụ (MPN, LCSC), điền BOM nếu chọn loại mạch
+async function importSheet(productId, cat) {
+  await refreshProducts();
+  const parts = await partsCache();
+  const byCode = new Map(), byKey = new Map();
+  for (const p of parts) {
+    for (const c of [p.code, p.mpn, ...String(p.codes || '').split(' ')]) if (c) byCode.set(String(c).toUpperCase(), p);
+    for (const v of [p.name, p.spec]) if (v) { const k = BomImport.key(v, p.package); if (!byKey.has(k)) byKey.set(k, p); }
+  }
+  const fileIn = h('input', { type: 'file', accept: '.csv,.tsv,.txt,.xlsx,text/csv', style: 'display:none' });
+  const fileLbl = h('span', { class: 'small muted' }, 'CSV / TSV xuất từ KiCad, Altium, EasyEDA; hoặc Excel .xlsx');
+  const target = h('select', {}, h('option', { value: '' }, 'Nhập lẻ (chỉ tạo linh kiện, không gắn mạch)'),
+    S.products.map(p => h('option', { value: p.id, selected: p.id === productId }, `${T('Điền BOM mạch')} ${p.code ? p.code + ' · ' : ''}${p.name}`)));
+  const replace = h('input', { type: 'checkbox', style: 'width:auto' });
+  const replaceRow = h('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center' }, replace, 'Thay toàn bộ BOM cũ bằng BOM trong file (không chọn: gộp vào BOM đang có)');
+  const catSel = h('select', {}, h('option', { value: 'part', selected: cat !== 'supply' }, 'Linh kiện mới vào nhóm Linh kiện'), h('option', { value: 'supply', selected: cat === 'supply' }, 'Linh kiện mới vào nhóm Vật tư'));
+  const sheetsBox = h('div', { class: 'row', style: 'flex-wrap:wrap' });
+  const sum = h('p', { class: 'small' });
+  const box = h('div', { class: 'list' });
+  let sheets = [], lines = [];
+  const showTarget = () => { replaceRow.style.display = target.value ? '' : 'none'; };
+  target.onchange = showTarget; showTarget();
+  const counts = () => {
+    const on = lines.filter(l => l.inc.checked), nw = on.filter(l => !l.part).length;
+    sum.textContent = `${on.length} ${T('dòng sẽ nhập')}: ${nw} ${T('tạo mới (tồn 0)')}, ${on.length - nw} ${T('đã có trong kho')} · ${lines.length - on.length} ${T('bỏ qua')}`;
+  };
+  const build = () => {
+    const groups = new Map();
+    sheets.filter(s => s.on && s.on.checked && s.parsed).forEach(s => s.parsed.items.forEach(it => {
+      const k = BomImport.key(it.name, it.package);
+      const g = groups.get(k);
+      if (g) { g.qty += it.qty; g.ref = [g.ref, it.ref].filter(Boolean).join(', '); g.label = [g.label, it.label].filter(Boolean).join(', '); g.skip = g.skip && it.skip; }
+      else groups.set(k, { ...it });
+    }));
+    lines = [...groups.values()].map(it => {
+      const L = { it, part: byCode.get(String(it.lcsc).toUpperCase()) || byCode.get(String(it.mpn).toUpperCase()) || byKey.get(BomImport.key(it.name, it.package)) || byKey.get(BomImport.key(it.value, it.package)) || null };
+      L.inc = h('input', { type: 'checkbox', checked: !it.skip, style: 'width:auto', onchange: counts });
+      L.nameIn = h('input', { value: it.name, style: 'min-width:0' });
+      L.st = h('span', { class: 'chip' });
+      const showSt = () => { L.st.textContent = T(L.part ? 'Đã có' : 'Mới'); L.st.className = 'chip ' + (L.part ? 'done' : ''); L.nameIn.disabled = !!L.part; counts(); };
+      L.sel = combo(parts, partLabel, L.part && L.part.id, T('— Tạo mới —'), p => { L.part = p; showSt(); });
+      showSt();
+      L.row = h('div', { class: 'item', style: 'grid-template-columns:auto 1fr auto' },
+        h('div', { class: 'l', style: 'display:flex;gap:4px;align-items:center' }, L.inc, `${num(it.qty)}×`),
+        h('div', { class: 't', style: 'display:grid;gap:4px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))' }, L.nameIn, L.sel),
+        h('div', { class: 'r' }, L.st),
+        h('div', { class: 's' }, [it.package, it.mpn && 'MPN ' + it.mpn, it.lcsc, it.ref && it.ref.slice(0, 60) + (it.ref.length > 60 ? '…' : ''), it.label && it.label.slice(0, 40)].filter(Boolean).join(' · ')));
+      return L;
+    });
+    box.replaceChildren(...(lines.length ? lines.map(l => l.row) : [h('div', { class: 'empty' }, 'Không có dòng nào')]));
+    counts();
+  };
+  fileIn.onchange = async () => {
+    const f = fileIn.files[0];
+    if (!f) return;
+    fileLbl.textContent = f.name;
+    try { sheets = await BomImport.read(f); } catch (e) { toast(e.message, true); return; }
+    sheets.forEach(s => { s.parsed = BomImport.items(s); });
+    const ok = sheets.filter(s => s.parsed);
+    if (!ok.length) { toast('Không nhận ra cột trong file (cần ít nhất cột Giá trị / Value và Vị trí / Số lượng)', true); sheetsBox.replaceChildren(); box.replaceChildren(); return; }
+    sheetsBox.replaceChildren(...sheets.map(s => { s.on = h('input', { type: 'checkbox', checked: !!s.parsed, disabled: !s.parsed, style: 'width:auto', onchange: build });
+      return h('label', { class: 'small', style: 'display:flex;gap:4px;align-items:center' }, s.on, `${s.name} (${s.parsed ? s.parsed.items.length : T('không nhận ra')})`); }));
+    build();
+  };
+  let close;
+  const go1 = h('button', { class: 'btn', onclick: () => {
+    const rows = lines.filter(l => l.inc.checked).map(l => {
+      const it = l.it;
+      return { part_id: l.part ? l.part.id : '', name: l.nameIn.value.trim() || it.name, spec: it.value !== l.nameIn.value.trim() ? it.value : '', package: it.package,
+        maker: it.maker, mpn: it.mpn, lcsc: it.lcsc, unit: it.unit, code: it.code, category: catSel.value, qty: it.qty, ref: it.ref,
+        note: [it.desc, it.label && `${T('Nhãn')}: ${it.label}`].filter(Boolean).join(' · ') };
+    });
+    if (!rows.length) return toast('Chưa chọn dòng nào', true);
+    if (target.value && replace.checked && !window.confirm(T('Thay toàn bộ BOM cũ của loại mạch này bằng BOM trong file?'))) return;
+    busy(go1, api('parts.import', { rows, product_id: target.value, replace: replace.checked ? 1 : 0 }, false).then(r => {
+      toast(`${T('Đã nhập')}: ${r.created} ${T('linh kiện mới')}, ${r.linked} ${T('đã có')}${target.value ? `, BOM ${r.bom_lines} ${T('dòng')}` : ''}`);
+      close(); S.parts = null; partSel.clear(); go('parts');
+    }).catch(() => {}));
+  } }, '📥 Nhập');
+  close = sheet('Nhập linh kiện từ file', grid(
+    h('div', { class: 'row' }, h('label', { class: 'btn ghost' }, '📂 Chọn file', fileIn), fileLbl),
+    field('Nhập vào', target), replaceRow, field('Nhóm cho linh kiện mới', catSel), sheetsBox, sum,
+    h('p', { class: 'small muted' }, 'Mỗi dòng: tích = nhập; ô chọn = linh kiện đã có trong kho (để trống = tạo mới, tồn 0, mã tự cấp LK-…). Điểm đo, lỗ bắt vít, dòng "Cần mua: Không" bỏ chọn sẵn. MPN / mã LCSC trong file được gắn làm mã phụ.'),
+    box), go1);
+}
+// Mã phụ: mã LCSC, MPN, mã vạch / QR in sẵn của nhà cung cấp -> quét là ra linh kiện này
+const PCODE = { lcsc: 'LCSC', mpn: 'MPN', barcode: 'Mã vạch NCC', other: 'Khác' };
+function codesBlock(p, reopen) {
+  const edit = can('parts.code_add');
+  const inp = h('input', { placeholder: T('Gõ hoặc quét mã (C25804, MPN, mã vạch…)'), autocapitalize: 'characters' });
+  const kind = h('select', { style: 'width:auto' }, Object.entries(PCODE).map(([v, l]) => h('option', { value: v }, l)));
+  const add = h('button', { class: 'btn ghost small', onclick: () => {
+    const c = inp.value.trim();
+    if (!c) return;
+    busy(add, api('parts.code_add', { part_id: p.id, code: c, kind: /^C\d{3,}$/i.test(c) ? 'lcsc' : kind.value }).then(() => { toast('Đã gắn mã phụ'); reopen(); }).catch(() => {}));
+  } }, '+ Gắn');
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); add.click(); } });
+  const list = (p.codes || []).map(c => h('span', { class: 'chip', style: 'display:inline-flex;gap:6px;align-items:center' }, `${T(PCODE[c.kind] || c.kind)}: ${c.code}`,
+    edit && h('button', { class: 'x', style: 'padding:0 2px', onclick: () => { if (window.confirm(T('Bỏ mã phụ này?'))) api('parts.code_del', { id: c.id }).then(reopen).catch(() => {}); } }, '✕')));
+  if (!edit && !list.length) return null;
+  return [h('h3', {}, 'Mã phụ (quét tem nhà cung cấp)'),
+    list.length ? h('div', { class: 'row', style: 'flex-wrap:wrap' }, list) : h('p', { class: 'small muted' }, 'Chưa có. Quét / gõ mã in sẵn trên cuộn, túi của nhà cung cấp để lần sau quét thẳng là ra linh kiện này.'),
+    edit && h('div', { class: 'row' }, h('div', { class: 'grow' }, inp), kind, add)];
 }
 async function supCache() { return (S.suppliers = await api('suppliers.list', {}, true).catch(() => S.suppliers || [])); }
 async function partEdit(p) {
@@ -793,7 +937,10 @@ async function partEdit(p) {
     a.name = a.name || ''; a.min_stock = f.min_stock.value === '' ? null : +f.min_stock.value; a.note = f.note.value; a.active = +f.active.value; a.supplier_id = sid || null;
     a.category = f.category.value;
     if (p.id) a.id = p.id; else a.stock = +f.stock.value || 0;
-    busy(btn, api('parts.save', a).then(() => { toast('Đã lưu'); close(); S.parts = null; go('parts'); }).catch(() => {}));
+    busy(btn, api('parts.save', a).then(async row => {
+      for (const c of p._codes || []) await api('parts.code_add', { part_id: row.id, ...c }, true).catch(() => {});   // từ quét mã lạ
+      toast('Đã lưu'); close(); S.parts = null; go('parts');
+    }).catch(() => {}));
   };
   close = sheet(p.id ? (p.category === 'supply' ? 'Sửa vật tư' : 'Sửa linh kiện') : (p.category === 'supply' ? 'Vật tư mới' : 'Linh kiện mới'), grid(field('Nhóm', f.category), two(field('Mã', f.code), field('Đơn vị', f.unit)), field('Tên', f.name), two(field('Giá trị / thông số', f.spec), field('Kiểu chân', f.package)),
     two(field('Hãng', f.maker), field('Mã NSX (MPN)', f.mpn)), two(field('Vị trí kho', f.location), field('Báo khi tồn dưới', f.min_stock)), field('Nhà cung cấp chính', sup),
@@ -1417,12 +1564,34 @@ async function handleScan(raw) {
       else toast(`UID ${uidFmt(r.uid)}: ${T('chưa có trong danh sách')}`, true);
     }
     else if (r.kind === 'customer') custDetail(r.id);
-    else if (r.kind === 'part') partSheet(r.id);
+    else if (r.kind === 'part') { partSheet(r.id); if (r.qty) toast(`${T('Tem LCSC')} ${r.lcsc}: ${num(r.qty)} ${T('cái')}`); }
+    else if (r.kind === 'unknown') unknownCodeSheet(r);
     else if (r.kind === 'sale') saleDetail(r.id);
     else if (r.kind === 'purchase') purchaseDetail(r.id);
     else if (r.kind === 'work_order') woDetail(r.id);
     else if (r.kind === 'supplier') toast(r.name);
   } catch {}
+}
+// Quét phải mã chưa biết (mã vạch / QR của nhà cung cấp): gắn làm mã phụ của 1 linh kiện, hoặc tạo linh kiện mới
+async function unknownCodeSheet(r) {
+  const code = r.lcsc || r.scanned || '';
+  if (!can('parts.code_add')) return toast(`${T('Không nhận ra mã')}: ${code}`, true);
+  const parts = await partsCache();
+  let pick = null;
+  const sel = combo(parts, partLabel, '', 'Gõ mã / tên linh kiện…', p => { pick = p; });
+  let close;
+  const attach = h('button', { class: 'btn', onclick: () => {
+    if (!pick) return toast('Chọn linh kiện', true);
+    busy(attach, api('parts.code_add', { part_id: pick.id, code, kind: r.lcsc ? 'lcsc' : 'barcode' })
+      .then(() => r.mpn ? api('parts.code_add', { part_id: pick.id, code: r.mpn, kind: 'mpn' }, true).catch(() => {}) : null)
+      .then(() => { toast('Đã gắn mã phụ'); close(); S.parts = null; partSheet(pick.id); }).catch(() => {}));
+  } }, 'Gắn vào linh kiện này');
+  close = sheet('Mã chưa có trong kho', grid(
+    h('div', { class: 'mono', style: 'word-break:break-all' }, code),
+    r.lcsc && kv([['Mã LCSC', r.lcsc], ['MPN', r.mpn], ['Số lượng trên tem', r.qty ? num(r.qty) : '']]),
+    h('p', { class: 'small muted' }, 'Gắn mã này vào linh kiện đã có (lần sau quét là ra linh kiện đó), hoặc tạo linh kiện mới.'),
+    field('Linh kiện', sel)),
+    [attach, can('parts.save') && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit({ category: 'part', mpn: r.mpn || '', name: r.mpn || '', _codes: [{ code, kind: r.lcsc ? 'lcsc' : 'barcode' }] }); } }, '+ Linh kiện mới')]);
 }
 // Camera: đọc QR bằng jsQR (chạy trong trình duyệt, cần trang https)
 async function scanSheet() {
@@ -1463,8 +1632,10 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter') {
     const buf = kbBuf; kbBuf = '';
     // UID mạch (tem QR), mã khách KH-…, linh kiện LK-…, số phiếu BH- / PN- / LSX-
-    if (buf.length >= 5 && now - kbStart < buf.length * 35 + 120 && /^([0-9A-F]{8}-?[0-9A-F]{8}-?[0-9A-F]{8}$|KH-|NCC-|LK-|BH-|PN-|LSX-)/i.test(buf)) {
-      const ae = document.activeElement;
+    // + tem LCSC "{pbn:…,pc:C…}" ; con trỏ không ở ô nhập thì nhận mọi mã (mã vạch NCC -> mã phụ)
+    const ae = document.activeElement, typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+    if (buf.length >= 5 && now - kbStart < buf.length * 35 + 120 &&
+        (/^([0-9A-F]{8}-?[0-9A-F]{8}-?[0-9A-F]{8}$|KH-|NCC-|LK-|BH-|PN-|LSX-|\{.*pc:)/i.test(buf) || !typing)) {
       if (ae && typeof ae.value === 'string' && ae.value.endsWith(buf)) ae.value = ae.value.slice(0, -buf.length);
       e.preventDefault(); e.stopPropagation();
       handleScan(buf);
