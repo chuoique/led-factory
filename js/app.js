@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.22';
+const APP_VERSION = 'LED Factory 0.23';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1003,15 +1003,36 @@ async function purchaseNew() {
   const totalEl = h('div', { class: 'total' });
   const sub = () => lines.reduce((s, l) => s + (+l.qty.value || 0) * (+l.price.value || 0), 0);
   const recalc = () => { const t = sub() - (+disc.value || 0) + (+vat.value || 0) + (+ship.value || 0); totalEl.textContent = money(t); paid.placeholder = String(Math.round(t)); };
-  const add = () => {
-    const L = { qty: numIn(1), price: numIn('', 1) };
-    L.sel = combo(parts, partLabel, null, 'Gõ mã / tên linh kiện…', p => { if (p && !L.price.value) L.price.value = p.cost || ''; recalc(); });
+  const add = (part, qty) => {
+    const L = { qty: numIn(qty || 1), price: numIn(part && part.cost ? part.cost : '', 1) };
+    L.sel = combo(parts, partLabel, part ? part.id : null, 'Gõ mã / tên linh kiện…', p => { if (p && !L.price.value) L.price.value = p.cost || ''; recalc(); });
     L.qty.oninput = L.price.oninput = recalc;
-    const rm = h('button', { class: 'x', type: 'button', onclick: () => { lines.splice(lines.indexOf(L), 1); row.remove(); recalc(); } }, '✕');
-    const row = h('div', { class: 'line' }, L.sel, L.qty, L.price, rm);
-    lines.push(L); box.append(row); recalc();
+    const rm = h('button', { class: 'x', type: 'button', onclick: () => { lines.splice(lines.indexOf(L), 1); L.row.remove(); recalc(); } }, '✕');
+    L.row = h('div', { class: 'line' }, L.sel, L.qty, L.price, rm);
+    lines.push(L); box.append(L.row); recalc();
   };
   add();
+  // Quét tem (LK-…, LCSC, Digi-Key / Mouser, mã vạch đã gắn) trong lúc mở phiếu -> thêm dòng, điền số lượng trên tem
+  const scanAdd = async code => {
+    let r;
+    try { r = await lookupCode(code); } catch (e) { return; }
+    if (r.kind === 'part') {
+      let p = parts.find(x => x.id === r.id);
+      if (!p) { p = await api('parts.get', { id: r.id }).catch(() => null); if (!p) return; parts.push(p); }
+      const q = r.qty || 1, ex = lines.find(l => l.sel.value === p.id);
+      if (ex) { ex.qty.value = (+ex.qty.value || 0) + q; recalc(); }
+      else {
+        const empty = lines.find(l => !l.sel.value && !l.sel.text);
+        if (empty) { lines.splice(lines.indexOf(empty), 1); empty.row.remove(); }
+        add(p, q);
+      }
+      if (navigator.vibrate) navigator.vibrate(40);
+      toast(`+${num(q)} · ${p.code} ${p.name}`);
+    } else if (r.kind === 'unknown') unknownCodeSheet({ ...r, onAttached: () => scanAdd(code) });   // gắn xong -> thêm luôn vào phiếu
+    else toast('Mã này không phải linh kiện', true);
+  };
+  S.purScan = scanAdd;
+  S.purScan.alive = () => box.isConnected;
   disc.oninput = vat.oninput = ship.oninput = recalc;
   const btn = h('button', { class: 'btn' }, 'Lưu phiếu nhập (cộng kho)');
   let close;
@@ -1023,7 +1044,9 @@ async function purchaseNew() {
       .then(r => { toast(`Đã lưu ${r.number}`); close(); S.parts = null; go('purchases'); }).catch(() => {}));
   };
   close = sheet('Phiếu nhập mua', grid(field('Nhà cung cấp', sup), h('div', { class: 'small muted' }, 'Linh kiện · SL · Đơn giá'), box,
-    h('div', { class: 'row' }, h('button', { class: 'btn ghost small', type: 'button', onclick: add }, '+ Thêm dòng'), h('button', { class: 'btn ghost small', type: 'button', onclick: () => partEdit({}) }, '+ Linh kiện mới')),
+    h('div', { class: 'row' }, h('button', { class: 'btn ghost small', type: 'button', onclick: () => add() }, '+ Thêm dòng'), h('button', { class: 'btn ghost small', type: 'button', onclick: scanSheet }, '📷 Quét tem'),
+      h('button', { class: 'btn ghost small', type: 'button', onclick: () => partEdit({}) }, '+ Linh kiện mới')),
+    h('p', { class: 'small muted' }, 'Quét tem bằng 📷 hoặc máy quét cầm tay (bấm ra ngoài ô nhập trước khi quét): tem kho LK-…, tem LCSC, Digi-Key / Mouser, mã vạch đã gắn → tự thêm dòng, điền số lượng trên tem.'),
     two(field('Chiết khấu (đ)', disc), field('VAT (đ)', vat)), two(field('Phí vận chuyển (đ)', ship), field('Đã trả (để trống = trả đủ)', paid)),
     two(field('Hình thức', method), field('Số chứng từ', doc)), field('Ghi chú', note),
     h('div', { class: 'row between' }, h('span', { class: 'muted' }, 'Tổng tiền'), totalEl)), btn);
@@ -1546,9 +1569,32 @@ function cashEdit(c) {
 
 // ---------- quét mã (camera / máy quét) ----------
 // Tem QR trên mạch = UID; ngoài ra mã khách KH-…, mã linh kiện LK-…, số phiếu BH- / PN- / LSX-
+// Tem Digi-Key / Mouser / Farnell (DataMatrix chuẩn ECIA / ANSI MH10.8.2): "[)>␞06␝P<mã NCC>␝1P<MPN>␝Q<số lượng>␝1T<lô>…"
+// -> {mpn, spn (mã của nhà phân phối), qty}. Máy quét bàn phím có thể làm rơi ký tự ngăn cách ␝ -> đoán theo tiền tố.
+function parseSupplierLabel(raw) {
+  const s = String(raw || '');
+  if (!/^\[\)>/.test(s)) return null;
+  const out = { mpn: '', spn: '', qty: 0, lot: '' };
+  let parts = s.split(/[\x1d\x1e\x04␝␞]/);
+  if (parts.length < 3) parts = s.replace(/^\[\)>\s*(06)?/, '').split(/(?=(?:1P|30P|1T|4L|10K|11K|1K|9D|10D|Q\d))/);   // mất ký tự ngăn cách: tách theo tiền tố chuẩn
+  for (let f of parts) {
+    f = f.trim();
+    if (/^\[\)>/.test(f) || f === '06' || !f) continue;
+    if (f.startsWith('1P')) out.mpn = out.mpn || f.slice(2);
+    else if (f.startsWith('30P')) out.spn = out.spn || f.slice(3);
+    else if (f.startsWith('1T')) out.lot = f.slice(2);
+    else if (/^Q\d/.test(f)) out.qty = parseFloat(f.slice(1)) || 0;
+    else if (/^P[^\d]?/.test(f) && !out.spn) out.spn = f.slice(1);
+  }
+  return out.mpn || out.spn ? out : null;
+}
 async function handleScan(raw) {
   const code = String(raw || '').trim();
   if (!code) return;
+  if (S.purScan && S.purScan.alive()) {                 // đang mở phiếu nhập: thêm thẳng dòng vào phiếu
+    document.querySelectorAll('.scrim').forEach((s, i, all) => { if (i === all.length - 1 && s.querySelector('video')) s.remove(); });
+    return S.purScan(code);
+  }
   const u = uidFind(code);
   if (u && S.saleScan && document.querySelector('.scrim')) {      // đang mở phiếu bán: thêm mạch vào phiếu
     document.querySelectorAll('.scrim').forEach((s, i, all) => { if (i === all.length - 1 && s.querySelector('video')) s.remove(); });
@@ -1557,20 +1603,28 @@ async function handleScan(raw) {
   document.querySelectorAll('.scrim').forEach(s => s.remove());
   S.saleScan = null;
   try {
-    const r = await api('scan.lookup', { code });
+    const r = await lookupCode(code);
     if (r.kind === 'board') {
       if (r.id) boardDetail(r.uid);
       else if (can('keys.issue') && window.confirm(T('Mạch chưa có trong danh sách. Tạo mã cho UID này?'))) { go('keys'); setTimeout(() => { const i = document.querySelector('#view input.mono'); if (i) { i.value = uidFmt(r.uid); i.dispatchEvent(new Event('input')); } }, 400); }
       else toast(`UID ${uidFmt(r.uid)}: ${T('chưa có trong danh sách')}`, true);
     }
     else if (r.kind === 'customer') custDetail(r.id);
-    else if (r.kind === 'part') { partSheet(r.id); if (r.qty) toast(`${T('Tem LCSC')} ${r.lcsc}: ${num(r.qty)} ${T('cái')}`); }
+    else if (r.kind === 'part') { partSheet(r.id); if (r.qty) toast(`${T('Số lượng trên tem')}: ${num(r.qty)}`); }
     else if (r.kind === 'unknown') unknownCodeSheet(r);
     else if (r.kind === 'sale') saleDetail(r.id);
     else if (r.kind === 'purchase') purchaseDetail(r.id);
     else if (r.kind === 'work_order') woDetail(r.id);
     else if (r.kind === 'supplier') toast(r.name);
   } catch {}
+}
+// Tra 1 mã vừa quét: tem Digi-Key / Mouser -> tra theo MPN (rồi mã nhà phân phối); còn lại máy chủ tự hiểu (UID, LK-, LCSC, mã phụ…)
+async function lookupCode(code) {
+  const lab = parseSupplierLabel(code);
+  if (!lab) return api('scan.lookup', { code });
+  let r = lab.mpn ? await api('scan.lookup', { code: lab.mpn }) : { kind: 'unknown' };
+  if (r.kind === 'unknown' && lab.spn) r = await api('scan.lookup', { code: lab.spn });
+  return { ...r, mpn: r.mpn || lab.mpn, spn: lab.spn, qty: r.qty || lab.qty, scanned: lab.mpn || lab.spn };
 }
 // Quét phải mã chưa biết (mã vạch / QR của nhà cung cấp): gắn làm mã phụ của 1 linh kiện, hoặc tạo linh kiện mới
 async function unknownCodeSheet(r) {
@@ -1579,19 +1633,23 @@ async function unknownCodeSheet(r) {
   const parts = await partsCache();
   let pick = null;
   const sel = combo(parts, partLabel, '', 'Gõ mã / tên linh kiện…', p => { pick = p; });
+  // các mã sẽ gắn: mã chính của tem (LCSC / MPN / mã vạch) + MPN + mã của nhà phân phối (Digi-Key, Mouser)
+  const codes = [{ code, kind: r.lcsc ? 'lcsc' : r.mpn && code === r.mpn ? 'mpn' : 'barcode' }];
+  if (r.mpn && r.mpn !== code) codes.push({ code: r.mpn, kind: 'mpn' });
+  if (r.spn && r.spn !== code) codes.push({ code: r.spn, kind: 'barcode' });
   let close;
   const attach = h('button', { class: 'btn', onclick: () => {
     if (!pick) return toast('Chọn linh kiện', true);
-    busy(attach, api('parts.code_add', { part_id: pick.id, code, kind: r.lcsc ? 'lcsc' : 'barcode' })
-      .then(() => r.mpn ? api('parts.code_add', { part_id: pick.id, code: r.mpn, kind: 'mpn' }, true).catch(() => {}) : null)
-      .then(() => { toast('Đã gắn mã phụ'); close(); S.parts = null; partSheet(pick.id); }).catch(() => {}));
+    busy(attach, api('parts.code_add', { part_id: pick.id, ...codes[0] })
+      .then(async () => { for (const c of codes.slice(1)) await api('parts.code_add', { part_id: pick.id, ...c }, true).catch(() => {}); })
+      .then(() => { toast('Đã gắn mã phụ'); close(); S.parts = null; if (r.onAttached) r.onAttached(pick); else partSheet(pick.id); }).catch(() => {}));
   } }, 'Gắn vào linh kiện này');
   close = sheet('Mã chưa có trong kho', grid(
     h('div', { class: 'mono', style: 'word-break:break-all' }, code),
-    r.lcsc && kv([['Mã LCSC', r.lcsc], ['MPN', r.mpn], ['Số lượng trên tem', r.qty ? num(r.qty) : '']]),
+    (r.lcsc || r.mpn || r.spn || r.qty) && kv([['Mã LCSC', r.lcsc], ['MPN', r.mpn], ['Mã nhà phân phối', r.spn], ['Số lượng trên tem', r.qty ? num(r.qty) : '']]),
     h('p', { class: 'small muted' }, 'Gắn mã này vào linh kiện đã có (lần sau quét là ra linh kiện đó), hoặc tạo linh kiện mới.'),
     field('Linh kiện', sel)),
-    [attach, can('parts.save') && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit({ category: 'part', mpn: r.mpn || '', name: r.mpn || '', _codes: [{ code, kind: r.lcsc ? 'lcsc' : 'barcode' }] }); } }, '+ Linh kiện mới')]);
+    [attach, can('parts.save') && !r.onAttached && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit({ category: 'part', mpn: r.mpn || '', name: r.mpn || '', _codes: codes }); } }, '+ Linh kiện mới')]);
 }
 // Camera: đọc QR bằng jsQR (chạy trong trình duyệt, cần trang https)
 async function scanSheet() {
@@ -1607,18 +1665,31 @@ async function scanSheet() {
   catch (e) { st.textContent = T('Không mở được camera: ') + T(e.message) + T('. Kiểm tra quyền camera trong Cài đặt.'); return; }
   video.srcObject = stream;
   try { await video.play(); } catch {}
-  st.textContent = T('Đưa mã QR vào khung hình…');
+  // Bộ đọc mã có sẵn của trình duyệt (Chrome Android / máy tính): thêm mã vạch 1D (EAN, Code128…) và DataMatrix (Digi-Key, Mouser).
+  // Không có (Safari iPhone) -> chỉ QR bằng jsQR.
+  const WANT = ['qr_code', 'data_matrix', 'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar', 'pdf417', 'aztec'];
+  let det = null;
+  try { if ('BarcodeDetector' in window) { const f = (await BarcodeDetector.getSupportedFormats()).filter(x => WANT.includes(x)); if (f.length) det = new BarcodeDetector({ formats: f }); } } catch (e) {}
+  st.textContent = T(det ? 'Đưa mã QR, mã vạch hoặc DataMatrix vào khung hình…' : 'Đưa mã QR vào khung hình… (trình duyệt này chỉ đọc QR; mã vạch / DataMatrix dùng máy quét cầm tay)');
   const cv = document.createElement('canvas'), ctx = cv.getContext('2d', { willReadFrequently: true });
   const stopAll = () => stream.getTracks().forEach(t => t.stop());
+  let done = false, busyDet = false, lastDet = 0;
+  const found = data => { if (done) return; done = true; stopAll(); if (navigator.vibrate) navigator.vibrate(60); handleScan(data); };
   const tick = () => {
     if (!video.isConnected) return stopAll();          // đóng bảng -> tắt camera
+    if (done) return;
     if (video.readyState >= 2 && video.videoWidth) {
+      const now = performance.now();
+      if (det && !busyDet && now - lastDet > 120) {
+        busyDet = true; lastDet = now;
+        det.detect(video).then(c => { busyDet = false; if (c && c[0] && c[0].rawValue) found(c[0].rawValue); }).catch(() => { busyDet = false; });
+      }
       const sc = Math.min(1, 640 / video.videoWidth);
       cv.width = Math.round(video.videoWidth * sc); cv.height = Math.round(video.videoHeight * sc);
       ctx.drawImage(video, 0, 0, cv.width, cv.height);
       const img = ctx.getImageData(0, 0, cv.width, cv.height);
       const res = jsQR(img.data, cv.width, cv.height, { inversionAttempts: 'dontInvert' });
-      if (res && res.data) { stopAll(); if (navigator.vibrate) navigator.vibrate(60); handleScan(res.data); return; }
+      if (res && res.data) return found(res.data);
     }
     requestAnimationFrame(tick);
   };
@@ -1635,11 +1706,17 @@ document.addEventListener('keydown', e => {
     // + tem LCSC "{pbn:…,pc:C…}" ; con trỏ không ở ô nhập thì nhận mọi mã (mã vạch NCC -> mã phụ)
     const ae = document.activeElement, typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
     if (buf.length >= 5 && now - kbStart < buf.length * 35 + 120 &&
-        (/^([0-9A-F]{8}-?[0-9A-F]{8}-?[0-9A-F]{8}$|KH-|NCC-|LK-|BH-|PN-|LSX-|\{.*pc:)/i.test(buf) || !typing)) {
-      if (ae && typeof ae.value === 'string' && ae.value.endsWith(buf)) ae.value = ae.value.slice(0, -buf.length);
+        (/^([0-9A-F]{8}-?[0-9A-F]{8}-?[0-9A-F]{8}$|KH-|NCC-|LK-|BH-|PN-|LSX-|\{.*pc:|\[\)>)/i.test(buf) || !typing)) {
+      const vis = buf.replace(/[\x1d\x1e\x04]/g, '');
+      if (ae && typeof ae.value === 'string' && ae.value.endsWith(vis)) ae.value = ae.value.slice(0, -vis.length);
       e.preventDefault(); e.stopPropagation();
       handleScan(buf);
     }
+    return;
+  }
+  // tem DataMatrix Digi-Key / Mouser: máy quét gửi ký tự ngăn cách GS (Ctrl+]) -> giữ lại để tách trường
+  if (e.key === 'Unidentified' || (e.ctrlKey && (e.key === ']' || e.code === 'BracketRight'))) {
+    if (now - kbLast <= 60) { kbBuf += '\x1d'; kbLast = now; e.preventDefault(); }
     return;
   }
   if (e.key.length !== 1) return;
