@@ -7,7 +7,7 @@
  */
 (() => {
 'use strict';
-const APP_VERSION = 'LED Factory 0.23';
+const APP_VERSION = 'LED Factory 0.24';
 const $ = s => document.querySelector(s);
 
 // ---------- tiện ích giao diện ----------
@@ -1619,9 +1619,32 @@ async function handleScan(raw) {
   } catch {}
 }
 // Tra 1 mã vừa quét: tem Digi-Key / Mouser -> tra theo MPN (rồi mã nhà phân phối); còn lại máy chủ tự hiểu (UID, LK-, LCSC, mã phụ…)
+// Tem cuộn / túi thường (vd "CL0603F N 22R P QTY:5000PCS 03607270085 260804 114"): bỏ số lượng, số lô, ngày
+// -> phần nhận diện linh kiện "CL0603F N 22R P" (giống nhau ở mọi cuộn) ; đoán giá trị, kiểu vỏ để tạo linh kiện mới
+function plainLabel(raw) {
+  const s = String(raw || '').trim();
+  const qm = s.match(/(?:QTY|Q'TY|SL|Số lượng)\s*[:：=]?\s*(\d[\d.,]*)\s*(?:PCS|PC|EA|CÁI)?/i);
+  const toks = s.split(/[\s,;|]+/).filter(Boolean).filter(t =>
+    !/^(?:QTY|Q'TY|SL)[:：=]?\d/i.test(t) && !/^\d[\d.,]*(?:PCS|PC|EA)$/i.test(t) &&     // số lượng
+    !/^\d{4,}$/.test(t) && !/^\d{1,3}$/.test(t) &&                                        // số lô, ngày, số thứ tự
+    !/^(?:LOT|DATE|DC|D\/C|BATCH|NO)[:：#]?/i.test(t));
+  const key = toks.join(' ');
+  const pkg = (s.match(/(0201|0402|0603|0805|1206|1210|2010|2512)/) || [])[1] || '';
+  const val = (toks.map(t => t.match(/^(\d+(?:\.\d+)?[RKMΩ]\d*|\d+[RKM]\d+|\d+(?:\.\d+)?(?:[pnuµ]F?|F))$/i)).find(Boolean) || [])[1] || '';
+  const type = /[pnuµ]F?$|F$/i.test(val) ? 'Tụ' : /[RKMΩ]/i.test(val) ? 'Điện trở' : '';
+  return { key: key.length >= 3 && toks.length < s.split(/\s+/).length ? key : s, qty: qm ? parseFloat(qm[1].replace(/[.,]/g, '')) : 0,
+    pkg, val, name: type && val ? `${type} ${val}` : '' };
+}
 async function lookupCode(code) {
   const lab = parseSupplierLabel(code);
-  if (!lab) return api('scan.lookup', { code });
+  if (!lab) {
+    const r = await api('scan.lookup', { code });
+    if (r.kind !== 'unknown' || /^\{.*pc:/i.test(code)) return r;
+    const pl = plainLabel(code);                       // thử lại bằng phần nhận diện (bỏ số lượng / lô / ngày)
+    const r2 = pl.key !== code ? await api('scan.lookup', { code: pl.key }) : r;
+    if (r2.kind === 'part') return { ...r2, qty: r2.qty || pl.qty };
+    return { ...r, scanned: pl.key, raw: code, qty: pl.qty, guess: pl };
+  }
   let r = lab.mpn ? await api('scan.lookup', { code: lab.mpn }) : { kind: 'unknown' };
   if (r.kind === 'unknown' && lab.spn) r = await api('scan.lookup', { code: lab.spn });
   return { ...r, mpn: r.mpn || lab.mpn, spn: lab.spn, qty: r.qty || lab.qty, scanned: lab.mpn || lab.spn };
@@ -1644,12 +1667,14 @@ async function unknownCodeSheet(r) {
       .then(async () => { for (const c of codes.slice(1)) await api('parts.code_add', { part_id: pick.id, ...c }, true).catch(() => {}); })
       .then(() => { toast('Đã gắn mã phụ'); close(); S.parts = null; if (r.onAttached) r.onAttached(pick); else partSheet(pick.id); }).catch(() => {}));
   } }, 'Gắn vào linh kiện này');
+  const g = r.guess || {};
   close = sheet('Mã chưa có trong kho', grid(
     h('div', { class: 'mono', style: 'word-break:break-all' }, code),
-    (r.lcsc || r.mpn || r.spn || r.qty) && kv([['Mã LCSC', r.lcsc], ['MPN', r.mpn], ['Mã nhà phân phối', r.spn], ['Số lượng trên tem', r.qty ? num(r.qty) : '']]),
+    r.raw && r.raw !== code && h('p', { class: 'small muted' }, 'Tem gốc:', ' ', h('span', { class: 'mono' }, r.raw), ' — ', 'chỉ gắn phần nhận diện linh kiện ở trên (bỏ số lượng, số lô, ngày) để các cuộn sau quét cũng nhận ra.'),
+    (r.lcsc || r.mpn || r.spn || r.qty || g.val) && kv([['Mã LCSC', r.lcsc], ['MPN', r.mpn], ['Mã nhà phân phối', r.spn], ['Giá trị', g.val], ['Kiểu vỏ', g.pkg], ['Số lượng trên tem', r.qty ? num(r.qty) : '']]),
     h('p', { class: 'small muted' }, 'Gắn mã này vào linh kiện đã có (lần sau quét là ra linh kiện đó), hoặc tạo linh kiện mới.'),
     field('Linh kiện', sel)),
-    [attach, can('parts.save') && !r.onAttached && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit({ category: 'part', mpn: r.mpn || '', name: r.mpn || '', _codes: codes }); } }, '+ Linh kiện mới')]);
+    [attach, can('parts.save') && h('button', { class: 'btn ghost', onclick: () => { close(); partEdit({ category: 'part', mpn: r.mpn || '', name: g.name || r.mpn || '', spec: g.val || '', package: g.pkg || '', _codes: codes }); } }, '+ Linh kiện mới')]);
 }
 // Camera: đọc QR bằng jsQR (chạy trong trình duyệt, cần trang https)
 async function scanSheet() {
